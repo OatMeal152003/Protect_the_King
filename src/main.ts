@@ -68,12 +68,12 @@ function overlay(html: string): HTMLDivElement {
 function showMenu() {
   screen = 'menu';
   const o = overlay(`
-    <div class="loading-box">
+    <div class="menu-card">
       <div class="title">PROTECT THE KING</div>
-      <div style="display:flex;flex-direction:column;gap:10px;margin-top:20px;">
-        <button data-act="mode">Play</button>
-        <button data-act="skins">Skins</button>
-        <button data-act="settings">Settings</button>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button data-act="mode">PLAY</button>
+        <button data-act="skins">SKINS</button>
+        <button data-act="settings">SETTINGS</button>
       </div>
     </div>`);
   o.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
@@ -88,15 +88,15 @@ function showMenu() {
 function showModeSelect() {
   screen = 'mode';
   const o = overlay(`
-    <div class="loading-box">
+    <div class="menu-card">
       <div class="title">SELECT MODE</div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;">
-        <button data-mode="ai">vs Computer</button>
-        <button data-mode="classic">Classic (untimed)</button>
-        <button data-mode="timed">Timed</button>
-        <button data-mode="local">Local pass-and-play</button>
-        <button data-mode="online">Online (room code)</button>
-        <button data-act="back">Back</button>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button data-mode="ai">VS COMPUTER</button>
+        <button data-mode="classic">CLASSIC (UNTIMED)</button>
+        <button data-mode="timed">TIMED</button>
+        <button data-mode="local">LOCAL PASS-AND-PLAY</button>
+        <button data-mode="online">ONLINE (ROOM CODE)</button>
+        <button data-act="back">BACK</button>
       </div>
     </div>`);
   o.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
@@ -115,13 +115,13 @@ function showModeSelect() {
 
 function showAIDifficulty() {
   const o = overlay(`
-    <div class="loading-box">
+    <div class="menu-card">
       <div class="title">DIFFICULTY</div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;">
-        <button data-d="easy">Easy</button>
-        <button data-d="medium">Medium</button>
-        <button data-d="hard">Hard</button>
-        <button data-act="back">Back</button>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button data-d="easy">EASY</button>
+        <button data-d="medium">MEDIUM</button>
+        <button data-d="hard">HARD</button>
+        <button data-act="back">BACK</button>
       </div>
     </div>`);
   o.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
@@ -138,13 +138,13 @@ function showAIDifficulty() {
 
 function showTimedSelect() {
   const o = overlay(`
-    <div class="loading-box">
+    <div class="menu-card">
       <div class="title">TIMED</div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;">
-        <button data-t="3+2">Blitz 3+2</button>
-        <button data-t="10+0">Rapid 10+0</button>
-        <button data-t="custom">Custom</button>
-        <button data-act="back">Back</button>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button data-t="3+2">BLITZ 3+2</button>
+        <button data-t="10+0">RAPID 10+0</button>
+        <button data-t="custom">CUSTOM</button>
+        <button data-act="back">BACK</button>
       </div>
     </div>`);
   o.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
@@ -166,13 +166,13 @@ function showTimedSelect() {
 
 function showOnlineMenu() {
   const o = overlay(`
-    <div class="loading-box">
+    <div class="menu-card">
       <div class="title">ONLINE</div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;">
-        <button data-act="create">Create room</button>
-        <input id="joincode" placeholder="6-char code" style="padding:8px;font-family:monospace;text-transform:uppercase;" />
-        <button data-act="join">Join room</button>
-        <button data-act="back">Back</button>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+        <button data-act="create">CREATE ROOM</button>
+        <input id="joincode" placeholder="6-CHAR CODE" style="padding:8px;font-family:monospace;text-transform:uppercase;text-align:center;" />
+        <button data-act="join">JOIN ROOM</button>
+        <button data-act="back">BACK</button>
       </div>
     </div>`);
   o.querySelector('[data-act="create"]')?.addEventListener('click', async () => {
@@ -216,9 +216,9 @@ function setupOnlineHandlers() {
 function showSkinSelect() {
   screen = 'skins';
   const o = overlay(`
-    <div class="loading-box">
+    <div class="menu-card">
       <div class="title">SKINS</div>
-      <div style="display:flex;gap:12px;margin-top:16px;flex-wrap:wrap;justify-content:center;">
+      <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;justify-content:center;">
         <div>
           <label>Pieces</label><br/>
           <select id="pskin">${SKIN_NAMES.map((s) => `<option value="${s}" ${s === pieceSkin ? 'selected' : ''}>${s}</option>`).join('')}</select>
@@ -228,8 +228,7 @@ function showSkinSelect() {
           <select id="bskin">${SKIN_NAMES.map((s) => `<option value="${s}" ${s === boardSkin ? 'selected' : ''}>${s}</option>`).join('')}</select>
         </div>
       </div>
-      <canvas id="preview" width="240" height="180" style="margin-top:12px;border:1px solid #fff;image-rendering:pixelated;"></canvas>
-      <div style="margin-top:12px;"><button data-act="back">Back</button></div>
+      <div style="margin-top:14px;"><button data-act="back">BACK</button></div>
     </div>`);
   const ps = o.querySelector('#pskin') as HTMLSelectElement;
   const bs = o.querySelector('#bskin') as HTMLSelectElement;
@@ -242,9 +241,9 @@ function showSkinSelect() {
 function showSettings() {
   screen = 'settings';
   const o = overlay(`
-    <div class="loading-box">
+    <div class="menu-card">
       <div class="title">SETTINGS</div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;align-items:center;">
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;align-items:center;">
         <label>Graphics:
           <select id="gfx">
             <option value="pixel" ${ctx.graphicsMode() === 'pixel' ? 'selected' : ''}>Pixelated (retro)</option>
@@ -465,11 +464,11 @@ function handleGameOver() {
   SFX.mate();
   // gameover screen
   const o = overlay(`
-    <div class="loading-box">
+    <div class="menu-card">
       <div class="title">${msg.toUpperCase()}</div>
       <div style="margin-top:16px;display:flex;gap:8px;justify-content:center;">
-        <button data-act="rematch">Rematch</button>
-        <button data-act="menu">Menu</button>
+        <button data-act="rematch">REMATCH</button>
+        <button data-act="menu">MENU</button>
       </div>
     </div>`);
   o.querySelector('[data-act="rematch"]')?.addEventListener('click', () => { SFX.click(); startGame(); });
@@ -482,10 +481,10 @@ function endGame(msg: string) {
   if (clock) clock.stop();
   SFX.mate();
   const o = overlay(`
-    <div class="loading-box">
+    <div class="menu-card">
       <div class="title">${msg.toUpperCase()}</div>
       <div style="margin-top:16px;display:flex;gap:8px;justify-content:center;">
-        <button data-act="menu">Menu</button>
+        <button data-act="menu">MENU</button>
       </div>
     </div>`);
   o.querySelector('[data-act="menu"]')?.addEventListener('click', () => { SFX.click(); showMenu(); });
