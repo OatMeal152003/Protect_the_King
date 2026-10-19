@@ -323,7 +323,7 @@ function ensureHUD() {
   if (h) return;
   h = document.createElement('div');
   h.id = 'gamehud';
-  h.style.cssText = 'position:fixed;top:12px;right:12px;width:230px;max-height:88vh;overflow:hidden;background:linear-gradient(160deg,rgba(20,16,30,0.92),rgba(10,8,18,0.92));border:1px solid rgba(255,215,0,0.35);border-radius:12px;padding:12px;color:#f0eaff;font-family:"Press Start 2P",monospace;font-size:10px;z-index:5;box-shadow:0 8px 24px rgba(0,0,0,0.5),inset 0 0 0 1px rgba(255,255,255,0.05);backdrop-filter:blur(6px);';
+  h.style.cssText = 'position:fixed;top:12px;right:12px;width:230px;max-height:88vh;overflow:hidden;background:linear-gradient(160deg,rgba(20,16,30,0.92),rgba(10,8,18,0.92));border:1px solid rgba(255,215,0,0.35);border-radius:12px;padding:12px;color:#f0eaff;font-family:"Rajdhani",sans-serif;font-size:13px;z-index:5;box-shadow:0 8px 24px rgba(0,0,0,0.5),inset 0 0 0 1px rgba(255,255,255,0.05);backdrop-filter:blur(6px);';
   h.innerHTML = `
     <div style="text-align:center;font-size:12px;letter-spacing:2px;color:#ffd700;margin-bottom:10px;text-shadow:0 0 8px rgba(255,215,0,0.4);">PROTECT THE KING</div>
     <div style="display:flex;gap:6px;margin-bottom:10px;">
