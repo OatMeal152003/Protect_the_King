@@ -52,6 +52,10 @@ let gameOver = false;
 let paused = false;
 let introActive = false;
 let cinematicActive = false;
+/** Completes an in-flight capture cinematic immediately (see applyMoveToBoard). */
+let flushPendingCapture: (() => void) | null = null;
+/** Incremented per game so late callbacks from an old game can never mutate a new one. */
+let gameSession = 0;
 let remoteMove = false;
 let hudInterval: ReturnType<typeof setInterval> | null = null;
 // captured tracking (placeholder)
@@ -105,6 +109,8 @@ function showMenu() {
   paused = false;
   introActive = false;
   cinematicActive = false;
+  flushPendingCapture = null;
+  gameSession++;
   pendingMoves = [];
   if (clock) { clock.stop(); clock = null; }
   if (ai) { ai.terminate(); ai = null; }
@@ -377,12 +383,14 @@ function showOnlineMenu() {
     }
     gameMode = 'online';
     playerColor = 'b';
+    pendingMoves = [];
     setupOnlineHandlers();
     startGame();
   }
 
   async function createRoomAndStart() {
     adapter = createAdapter();
+    pendingMoves = [];
     const code = await adapter.createRoom();
     // Show waiting state; do NOT start game yet.
     const wait = overlay(`
@@ -395,11 +403,13 @@ function showOnlineMenu() {
     gameMode = 'online';
     playerColor = 'w';
     setupOnlineHandlers();
+    let began = false;
     adapter.onOpponent((present) => {
-      if (present) {
-        clearOverlays();
-        startGame();
-      }
+      // Fired by the rooms UPDATE or by the joiner's broadcast handshake.
+      if (!present || began) return;
+      began = true;
+      clearOverlays();
+      startGame();
     });
     wait.querySelector('[data-act="cancel"]')?.addEventListener('click', () => {
       SFX.click();
@@ -745,6 +755,7 @@ function resumeGame() {
 
 // ---- Game start ----
 async function startGame() {
+  gameSession++;
   screen = 'game';
   clearOverlays();
   game = new ChessGame();
@@ -858,14 +869,19 @@ function updateHUD() {
 
 // ---- Move application ----
 function applyMoveToBoard(from: string, to: string, mv: any, _isCapture: boolean) {
+  // If a capture cinematic is still playing, finalize it first so this move is
+  // applied to an up-to-date board (catch-up bursts can deliver several moves).
+  if (flushPendingCapture) { const flush = flushPendingCapture; flushPendingCapture = null; flush(); }
   const piece = boardView!.getPieceAt(from);
   const victim = boardView!.getPieceAt(to);
   const isCaptureMove = !!victim || mv.flags?.includes('c') || mv.flags?.includes('e');
   const pieceType = piece?.type || 'pawn';
   const promo = mv.promotion;
   const wasRemote = remoteMove;
+  const session = gameSession;
 
   const doApply = () => {
+    if (session !== gameSession) return; // a late callback from a previous game
     clock?.resume();
     if (isCaptureMove) {
       if (victim) capturedPieces.push(victim.type);
@@ -908,6 +924,20 @@ function applyMoveToBoard(from: string, to: string, mv: any, _isCapture: boolean
     // freeze the clock and input while the capture cinematic plays
     clock?.pause();
     cinematicActive = true;
+    // Runs exactly once — whether the animation finishes, fails, or stalls
+    // (rAF is suspended while a tab is hidden, which used to leave the move
+    // half-applied and get re-sent much later).
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      if (flushPendingCapture === finish) flushPendingCapture = null;
+      if (session !== gameSession) return;
+      cinematicActive = false;
+      doApply();
+      checkEndAndAI();
+    };
+    flushPendingCapture = finish;
     playCapture(
       { scene: ctx.scene, camera: ctx.camera, controls: ctx.controls, group: ctx.group },
       piece.mesh,
@@ -915,15 +945,8 @@ function applyMoveToBoard(from: string, to: string, mv: any, _isCapture: boolean
       from, to, pieceType,
       SKINS[pieceSkin].effectColor,
       shortMode,
-    ).then(() => {
-      cinematicActive = false;
-      doApply();
-      checkEndAndAI();
-    }).catch(() => {
-      cinematicActive = false;
-      doApply();
-      checkEndAndAI();
-    });
+    ).then(finish, finish);
+    setTimeout(finish, 4000);
   } else {
     doApply();
     checkEndAndAI();

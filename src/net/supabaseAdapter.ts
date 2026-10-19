@@ -13,6 +13,16 @@ export class SupabaseAdapter implements NetAdapter {
   private broadcast: RealtimeChannel | null = null;
   private code = '';
   private lastSentMove: { from: string; to: string; fen: string } | null = null;
+  /** Highest moves.id already seen/emitted — keeps application strictly ordered. */
+  private lastRowId = 0;
+  /** Room this client is currently subscribed to (cursor reset guard). */
+  private subscribedCode = '';
+  /** Send a join handshake once the broadcast channel is ready. */
+  private announceJoin = false;
+  /** Moves that arrived before main.ts registered a handler. */
+  private queued: NetMove[] = [];
+  /** Signatures of moves this client already sent (guards double inserts). */
+  private sentSignatures = new Set<string>();
 
   private moveCb: ((m: NetMove) => void) | null = null;
   private clockCb: ((w: number, b: number) => void) | null = null;
@@ -51,6 +61,7 @@ export class SupabaseAdapter implements NetAdapter {
       .select('code')
       .single();
     if (error || !data) throw new Error('Room not found or already full');
+    this.announceJoin = true;
     this.subscribe(this.code);
   }
 
@@ -70,6 +81,15 @@ export class SupabaseAdapter implements NetAdapter {
   private subscribe(code: string): void {
     if (this.channel) this.channel.unsubscribe();
     if (this.broadcast) this.broadcast.unsubscribe();
+    // Reset the row cursor only for a different room; on a reconnect we want
+    // to keep it so resync fetches only the moves we actually missed.
+    if (this.subscribedCode !== code) {
+      this.subscribedCode = code;
+      this.lastRowId = 0;
+      this.queued = [];
+      this.sentSignatures.clear();
+    }
+    this.lastSentMove = null;
 
     // Presence + moves via postgres changes
     this.channel = this.supabase
@@ -77,13 +97,10 @@ export class SupabaseAdapter implements NetAdapter {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'moves', filter: `room_code=eq.${code}` }, (payload: any) => {
         const row = payload.new;
         console.log('[supabase] move insert', row?.id, row?.from_sq, row?.to_sq);
-        if (!row) return;
-        // Skip our own echoes: match by from/to/fen
-        if (this.lastSentMove && row.from_sq === this.lastSentMove.from && row.to_sq === this.lastSentMove.to && row.fen === this.lastSentMove.fen) {
-          console.log('[supabase] skip own echo');
-          this.lastSentMove = null;
-          return;
-        }
+        if (!row || typeof row.id !== 'number') return;
+        // Strictly ordered: never apply an older row twice or out of order.
+        if (row.id <= this.lastRowId) return;
+        this.lastRowId = row.id;
         const move: NetMove = {
           from: row.from_sq,
           to: row.to_sq,
@@ -92,8 +109,8 @@ export class SupabaseAdapter implements NetAdapter {
           whiteMs: row.white_ms,
           blackMs: row.black_ms,
         };
-        this.moveCb?.(move);
-        this.clockCb?.(row.white_ms, row.black_ms);
+        if (this.isOwnEcho(move)) { console.log('[supabase] skip own echo'); return; }
+        this.emit(move);
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${code}` }, (payload: any) => {
         const row = payload.new;
@@ -101,16 +118,70 @@ export class SupabaseAdapter implements NetAdapter {
       })
       .subscribe((status: string) => {
         console.log('[supabase] moves channel:', status, code);
+        // Realtime does not replay events missed during a disconnect;
+        // pull anything we have not seen yet so the game can never deadlock.
+        if (status === 'SUBSCRIBED') void this.resync();
       });
-    // Broadcast channel for draw/resign/clock
+    // Broadcast channel for draw/resign and the join handshake
     this.broadcast = this.supabase
       .channel(`events:${code}`)
       .on('broadcast', { event: 'draw' }, () => this.drawCb?.())
       .on('broadcast', { event: 'resign' }, () => this.resignCb?.())
-      .subscribe();
+      .on('broadcast', { event: 'join' }, () => this.oppCb?.(true))
+      .subscribe((status: string) => {
+        // Tell the host we arrived. Some Realtime setups delay the rooms
+        // UPDATE event, so the handshake carries the start signal too.
+        if (status === 'SUBSCRIBED' && this.announceJoin) {
+          this.announceJoin = false;
+          void this.broadcast?.send({ type: 'broadcast', event: 'join', payload: {} });
+        }
+      });
+  }
+
+  private isOwnEcho(m: NetMove): boolean {
+    if (!this.lastSentMove) return false;
+    const match = m.from === this.lastSentMove.from && m.to === this.lastSentMove.to && m.fen === this.lastSentMove.fen;
+    if (match) this.lastSentMove = null;
+    return match;
+  }
+
+  private emit(m: NetMove): void {
+    if (!this.moveCb) { this.queued.push(m); return; }
+    this.moveCb(m);
+    this.clockCb?.(m.whiteMs ?? 0, m.blackMs ?? 0);
+  }
+
+  /** Apply any moves committed while the channel was down (or before handlers registered). */
+  private async resync(): Promise<void> {
+    if (!this.code) return;
+    const { data, error } = await this.supabase
+      .from('moves')
+      .select('id,from_sq,to_sq,promotion,fen,white_ms,black_ms')
+      .eq('room_code', this.code)
+      .gt('id', this.lastRowId)
+      .order('id', { ascending: true });
+    if (error || !data) return;
+    for (const row of data as any[]) {
+      if (typeof row.id !== 'number' || row.id <= this.lastRowId) continue;
+      this.lastRowId = row.id;
+      const move: NetMove = {
+        from: row.from_sq,
+        to: row.to_sq,
+        promotion: row.promotion || undefined,
+        fen: row.fen,
+        whiteMs: row.white_ms,
+        blackMs: row.black_ms,
+      };
+      if (this.isOwnEcho(move)) continue;
+      this.emit(move);
+    }
   }
 
   sendMove(m: NetMove): void {
+    // A given (from, to, resulting FEN) is unique within a game; never send it twice.
+    const sig = `${m.from}|${m.to}|${m.promotion || ''}|${m.fen}`;
+    if (this.sentSignatures.has(sig)) return;
+    this.sentSignatures.add(sig);
     this.lastSentMove = { from: m.from, to: m.to, fen: m.fen };
     this.supabase.from('moves').insert({
       room_code: this.code,
@@ -122,7 +193,7 @@ export class SupabaseAdapter implements NetAdapter {
       white_ms: toIntMs(m.whiteMs),
       black_ms: toIntMs(m.blackMs),
     }).then(({ error }) => {
-      if (error) { console.error('sendMove failed', error.message, error.details, error.hint, error.code); }
+      if (error) { console.error('sendMove failed', error.message, error.details, error.hint, error.code); this.sentSignatures.delete(sig); }
     });
   }
 
@@ -130,7 +201,13 @@ export class SupabaseAdapter implements NetAdapter {
     // Clocks now travel with each move; nothing to do here.
   }
 
-  onMove(cb: (m: NetMove) => void): void { this.moveCb = cb; }
+  onMove(cb: (m: NetMove) => void): void {
+    this.moveCb = cb;
+    if (this.queued.length) {
+      const backlog = this.queued.splice(0);
+      for (const m of backlog) cb(m);
+    }
+  }
   onClock(cb: (w: number, b: number) => void): void { this.clockCb = cb; }
   onOpponent(cb: (p: boolean) => void): void { this.oppCb = cb; }
   offerDraw(): void { this.broadcast?.send({ type: 'broadcast', event: 'draw', payload: {} }); }

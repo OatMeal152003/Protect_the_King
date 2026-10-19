@@ -20,7 +20,7 @@ export class Clock {
     if (!this.started) { this.started = true; }
     this.active = color;
     this.paused = false;
-    this.lastTick = performance.now();
+    this.lastTick = Date.now();
     if (!this.running) { this.running = true; this.tick(); }
   }
 
@@ -30,25 +30,25 @@ export class Clock {
     if (this.active === 'b') this.blackMs += this.incrementMs;
     this.active = color;
     this.paused = false;
-    this.lastTick = performance.now();
+    this.lastTick = Date.now();
   }
 
   /** Freeze accumulation (e.g. while a capture cinematic plays). */
   pause(): void {
     this.paused = true;
-    this.lastTick = performance.now();
+    this.lastTick = Date.now();
   }
 
   /** Resume accumulation from the current instant (no time jump). */
   resume(): void {
     if (!this.paused) return;
     this.paused = false;
-    this.lastTick = performance.now();
+    this.lastTick = Date.now();
   }
 
   private tick = (): void => {
     if (!this.running) return;
-    const now = performance.now();
+    const now = Date.now();
     const dt = now - this.lastTick;
     this.lastTick = now;
     if (!this.paused) {
