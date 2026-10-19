@@ -9,6 +9,7 @@ import { Clock } from './game/clock';
 import { AI, type Difficulty } from './ai/ai';
 import { SFX } from './game/sound';
 import { playCapture } from './render/cinematics';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { loadSettings, saveSettings } from './render/pixel';
 import { createAdapter } from './net';
 import type { NetAdapter, NetMove } from './net';
@@ -347,7 +348,7 @@ function showSkinSelect() {
         <div class="right-col" style="align-items:stretch;justify-content:center;">
           <div class="quick-panel" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;">
             <div class="panel-title">PREVIEW</div>
-            <canvas id="skinpreview" width="400" height="300" style="border:3px solid var(--c-gold,#C89B42);border-radius:6px;background:#1a1a2e;max-width:100%;"></canvas>
+            <canvas id="skinpreview" width="420" height="320" style="border:3px solid var(--c-gold,#C89B42);border-radius:6px;background:#1a1a2e;max-width:100%;"></canvas>
             <div id="skinlabel" style="margin-top:10px;font-family:'Jersey 10',monospace;font-size:1.1rem;color:#F2E9D5;letter-spacing:2px;">${pieceSkin.toUpperCase()} / ${boardSkin.toUpperCase()}</div>
           </div>
         </div>
@@ -373,8 +374,14 @@ function showSkinSelect() {
     await bv.loadBoard(SKINS[boardSkin].boardPath);
     await bv.placeStart();
     scene.add(group);
+    const controls = new OrbitControls(cam, renderer.domElement);
+    controls.enableDamping = true;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 1.2;
+    controls.target.set(0, 0.5, 0);
+    controls.update();
     function loop() {
-      group.rotation.y += 0.003;
+      controls.update();
       renderer.render(scene, cam);
       skinPreviewAnimId = requestAnimationFrame(loop);
     }
