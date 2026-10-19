@@ -376,10 +376,19 @@ function applyMoveToBoard(from: string, to: string, mv: any, _isCapture: boolean
       capturedPieces.push(victim.type);
     }
     if (promo) {
-      // replace pawn mesh with promoted piece
       boardView!.removePiece(from);
       boardView!.removePiece(to);
-      boardView!.addPiece(to, (mv.color === 'w' ? 'white' : 'black') as any, promo === 'q' ? 'queen' : promo === 'r' ? 'rook' : promo === 'b' ? 'bishop' : 'knight');
+      boardView!.addPiece(to, (mv.color === 'w' ? 'white' : 'black') as any, promo === 'q' ? 'queen' : promo === 'r' ? 'rook' : promo === 'b' ? 'bishop' : 'knight').then((pm) => {
+        pm.mesh.scale.set(0.01, 0.01, 0.01);
+        const t0 = performance.now();
+        const step = () => {
+          const t = Math.min(1, (performance.now() - t0) / 250);
+          const s = 1 + 0.2 * Math.sin(t * Math.PI);
+          pm.mesh.scale.set(s, s, s);
+          if (t < 1) requestAnimationFrame(step); else pm.mesh.scale.set(1, 1, 1);
+        };
+        requestAnimationFrame(step);
+      });
     } else {
       boardView!.movePiece(from, to);
     }

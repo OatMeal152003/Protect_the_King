@@ -72,19 +72,33 @@ export class BoardView {
     return pm;
   }
 
-  movePiece(from: string, to: string): PieceMesh | undefined {
+  movePiece(from: string, to: string, animate = true): PieceMesh | undefined {
     const pm = this.pieces.get(from);
     if (!pm) return;
     this.pieces.delete(from);
-    // remove victim if present
     const victim = this.pieces.get(to);
-    if (victim) { this.group.remove(victim.mesh); }
+    if (victim) { this.group.remove(victim.mesh); this.pieces.delete(to); }
     this.pieces.set(to, pm);
     pm.square = to;
     const file = to.charCodeAt(0) - 97;
     const rank = parseInt(to[1]) - 1;
     const c = squareCenter(file, rank);
-    pm.mesh.position.set(c.x, c.y, c.z);
+    const target = new THREE.Vector3(c.x, c.y, c.z);
+    if (!animate) { pm.mesh.position.copy(target); return pm; }
+    // slide animation
+    const start = pm.mesh.position.clone();
+    const t0 = performance.now();
+    const dur = 180;
+    const step = () => {
+      const t = Math.min(1, (performance.now() - t0) / dur);
+      const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      pm.mesh.position.lerpVectors(start, target, e);
+      // slight arc
+      pm.mesh.position.y = start.y + Math.sin(t * Math.PI) * 0.4;
+      if (t < 1) requestAnimationFrame(step);
+      else pm.mesh.position.copy(target);
+    };
+    requestAnimationFrame(step);
     return pm;
   }
 
