@@ -42,6 +42,17 @@ export class SupabaseAdapter implements NetAdapter {
     this.subscribe(this.code);
   }
 
+  async listOpenRooms(): Promise<{ code: string; created_at: string }[]> {
+    const { data, error } = await this.supabase
+      .from('rooms')
+      .select('code, created_at')
+      .eq('black_present', false)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (error) return [];
+    return (data || []).map((r: any) => ({ code: r.code, created_at: r.created_at }));
+  }
+
   private subscribe(code: string): void {
     if (this.channel) this.channel.unsubscribe();
     if (this.broadcast) this.broadcast.unsubscribe();

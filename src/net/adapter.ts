@@ -2,6 +2,7 @@ export interface NetMove { from: string; to: string; promotion?: string; fen: st
 export interface NetAdapter {
   createRoom(): Promise<string>;
   joinRoom(code: string): Promise<void>;
+  listOpenRooms(): Promise<{ code: string; created_at: string }[]>;
   sendMove(m: NetMove): void;
   sendClock(whiteMs: number, blackMs: number): void;
   onMove(cb: (m: NetMove) => void): void;
@@ -32,6 +33,9 @@ export class LocalAdapter implements NetAdapter {
   async joinRoom(code: string): Promise<void> {
     this.code = code.toUpperCase();
     this.connect(this.code);
+  }
+  async listOpenRooms(): Promise<{ code: string; created_at: string }[]> {
+    return [];
   }
   private connect(code: string): void {
     this.channel = new BroadcastChannel('ptk-room-' + code);

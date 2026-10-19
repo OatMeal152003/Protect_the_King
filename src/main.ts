@@ -31,7 +31,7 @@ let settings = loadSettings();
 ctx.applyPixelSize(settings.width, settings.height);
 
 // ---- State ----
-type Screen = 'menu' | 'mode' | 'skins' | 'settings' | 'game' | 'gameover';
+type Screen = 'menu' | 'mode' | 'skins' | 'settings' | 'game' | 'gameover' | 'online';
 let screen: Screen = 'menu';
 let pieceSkin = localStorage.getItem('ptk_pieceSkin') || 'classic';
 let boardSkin = localStorage.getItem('ptk_boardSkin') || 'classic';
@@ -293,38 +293,129 @@ function showTimedSelect() {
 }
 
 function showOnlineMenu() {
+  screen = 'online';
+  const isSupa = !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
   const o = overlay(`
-    <div class="menu-card">
-      <div class="title">ONLINE</div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
-        <button data-act="create">CREATE ROOM</button>
-        <input id="joincode" placeholder="6-CHAR CODE" style="padding:8px;font-family:monospace;text-transform:uppercase;text-align:center;" />
-        <button data-act="join">JOIN ROOM</button>
-        <button data-act="back">BACK</button>
+    <div class="main-menu">
+      <div class="menu-layout" style="grid-template-columns: minmax(300px, 420px) 1fr; max-width:1000px; margin:0 auto;">
+        <div class="left-col" style="justify-content:center;">
+          <div class="royal-banner">
+            <div class="title">ONLINE</div>
+            <div class="subtitle">MULTIPLAYER</div>
+          </div>
+          <div class="quick-panel" style="margin-top:12px;">
+            <div class="mode-section">
+              <div class="mode-name">CREATE ROOM</div>
+              <div class="mode-desc">Host a new game and wait for a challenger.</div>
+              <button class="med-btn" data-act="create" style="justify-content:center;">CREATE ROOM</button>
+            </div>
+            <div class="mode-section" style="margin-top:14px;">
+              <div class="mode-name">JOIN BY CODE</div>
+              <div class="mode-desc">Enter a 6-character room code.</div>
+              <input id="joincode" placeholder="6-CHAR CODE" style="padding:8px;font-family:monospace;text-transform:uppercase;text-align:center;width:100%;margin-bottom:8px;" />
+              <button class="med-btn" data-act="join" style="justify-content:center;">JOIN ROOM</button>
+            </div>
+            ${isSupa ? `
+            <div class="mode-section" style="margin-top:14px;">
+              <div class="mode-name">OPEN ROOMS</div>
+              <div class="mode-desc">Rooms waiting for an opponent.</div>
+              <div id="roomlist" style="max-height:180px;overflow:auto;margin-bottom:8px;"></div>
+              <button class="med-btn" data-act="refresh" style="justify-content:center;">REFRESH LIST</button>
+            </div>` : ''}
+            <div style="margin-top:14px;">
+              <button class="med-btn" data-act="back" style="justify-content:center;">BACK</button>
+            </div>
+          </div>
+        </div>
+        <div class="right-col" style="align-items:stretch;justify-content:center;">
+          <div class="quick-panel" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <div class="panel-title">HOW IT WORKS</div>
+            <div style="font-family:'Jersey 10',monospace;font-size:1rem;color:#F2E9D5;text-align:center;line-height:1.6;max-width:360px;">
+              ${isSupa
+                ? 'Create a room and share the code, or pick an open room from the list. The game starts only when both players are connected.'
+                : 'Open two browser tabs on this device. Create a room in one, join with the code in the other. (Cross-device play needs Supabase env vars.)'}
+            </div>
+          </div>
+        </div>
       </div>
     </div>`);
-  o.querySelector('[data-act="create"]')?.addEventListener('click', async () => {
-    SFX.click();
+
+  async function loadRooms() {
+    if (!isSupa) return;
+    const list = o.querySelector('#roomlist') as HTMLDivElement;
+    if (!list) return;
+    list.innerHTML = '<div style="opacity:0.6;font-size:0.85rem;">Loading...</div>';
     adapter = createAdapter();
-    const code = await adapter.createRoom();
-    showAlert('Room code: ' + code + ' (share it). Waiting for opponent...');
-    gameMode = 'online';
-    playerColor = 'w';
-    setupOnlineHandlers();
-    startGame();
-  });
-  o.querySelector('[data-act="join"]')?.addEventListener('click', async () => {
-    SFX.click();
-    const code = (o.querySelector('#joincode') as HTMLInputElement).value.trim().toUpperCase();
-    if (code.length < 4) { showAlert('Enter a code'); return; }
+    const rooms = await adapter.listOpenRooms();
+    if (!rooms.length) { list.innerHTML = '<div style="opacity:0.6;font-size:0.85rem;">No open rooms.</div>'; return; }
+    list.innerHTML = rooms.map((r) => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;margin:4px 0;background:rgba(28,27,25,0.6);border:1px solid rgba(200,155,66,0.4);border-radius:4px;">
+        <span style="font-family:monospace;letter-spacing:2px;">${r.code}</span>
+        <button class="opt-btn" data-join="${r.code}" style="padding:4px 10px;">JOIN</button>
+      </div>`).join('');
+    list.querySelectorAll('[data-join]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        SFX.click();
+        const code = (b as HTMLElement).dataset.join as string;
+        await joinRoomAndStart(code);
+      });
+    });
+  }
+
+  async function joinRoomAndStart(code: string) {
     adapter = createAdapter();
-    await adapter.joinRoom(code);
+    try {
+      await adapter.joinRoom(code);
+    } catch (e) {
+      showAlert('Could not join room: ' + (e as Error).message);
+      return;
+    }
     gameMode = 'online';
     playerColor = 'b';
     setupOnlineHandlers();
     startGame();
+  }
+
+  async function createRoomAndStart() {
+    adapter = createAdapter();
+    const code = await adapter.createRoom();
+    // Show waiting state; do NOT start game yet.
+    const wait = overlay(`
+      <div class="menu-card">
+        <div class="title">WAITING</div>
+        <div style="margin:14px 0;font-size:1.1rem;color:#F2E9D5;text-align:center;">Room code: <span style="color:#C89B42;letter-spacing:3px;">${code}</span></div>
+        <div style="margin-bottom:14px;font-size:0.9rem;opacity:0.8;text-align:center;">Share this code. Game starts when an opponent joins.</div>
+        <button data-act="cancel">CANCEL</button>
+      </div>`);
+    gameMode = 'online';
+    playerColor = 'w';
+    setupOnlineHandlers();
+    adapter.onOpponent((present) => {
+      if (present) {
+        clearOverlays();
+        startGame();
+      }
+    });
+    wait.querySelector('[data-act="cancel"]')?.addEventListener('click', () => {
+      SFX.click();
+      adapter?.disconnect();
+      adapter = null;
+      clearOverlays();
+      showOnlineMenu();
+    });
+  }
+
+  o.querySelector('[data-act="create"]')?.addEventListener('click', () => { SFX.click(); createRoomAndStart(); });
+  o.querySelector('[data-act="join"]')?.addEventListener('click', async () => {
+    SFX.click();
+    const code = (o.querySelector('#joincode') as HTMLInputElement).value.trim().toUpperCase();
+    if (code.length < 4) { showAlert('Enter a code'); return; }
+    await joinRoomAndStart(code);
   });
+  o.querySelector('[data-act="refresh"]')?.addEventListener('click', () => { SFX.click(); loadRooms(); });
   o.querySelector('[data-act="back"]')?.addEventListener('click', () => { SFX.click(); showModeSelect(); });
+
+  if (isSupa) loadRooms();
 }
 
 function setupOnlineHandlers() {
