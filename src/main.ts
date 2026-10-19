@@ -68,14 +68,15 @@ function overlay(html: string): HTMLDivElement {
 function showMenu() {
   screen = 'menu';
   const o = overlay(`
-    <div class="menu-card">
-      <div class="title">PROTECT THE KING</div>
-      <div style="display:flex;flex-direction:column;gap:6px;">
-        <button data-act="mode">PLAY</button>
-        <button data-act="skins">SKINS</button>
-        <button data-act="settings">SETTINGS</button>
-      </div>
+    <div class="menu-panel">
+      <div class="title">PROTECT<br/>THE KING</div>
+      <div class="subtitle">A PIXEL CHESS BATTLE</div>
+      <button class="menu-btn" data-act="mode">PLAY</button>
+      <button class="menu-btn" data-act="skins">SKINS</button>
+      <button class="menu-btn" data-act="settings">SETTINGS</button>
+      <div class="footer">v1.0 · THREE.JS + STOCKFISH</div>
     </div>`);
+  o.classList.add('overlay-menu');
   o.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
     SFX.click();
     const act = (b as HTMLElement).dataset.act;
