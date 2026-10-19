@@ -62,13 +62,16 @@ export class SupabaseAdapter implements NetAdapter {
       .channel(`room:${code}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'moves', filter: `room_code=eq.${code}` }, (payload: any) => {
         const row = payload.new;
-        if (!row || row.id <= this.lastMoveId) return;
+        console.log('[supabase] move insert', row?.id, row?.from_sq, row?.to_sq, 'lastMoveId=', this.lastMoveId);
+        if (!row || row.id <= this.lastMoveId) { console.log('[supabase] skip'); return; }
         this.lastMoveId = row.id;
         const move: NetMove = {
           from: row.from_sq,
           to: row.to_sq,
           promotion: row.promotion || undefined,
           fen: row.fen,
+          whiteMs: row.white_ms,
+          blackMs: row.black_ms,
         };
         this.moveCb?.(move);
         this.clockCb?.(row.white_ms, row.black_ms);
@@ -77,8 +80,9 @@ export class SupabaseAdapter implements NetAdapter {
         const row = payload.new;
         if (row?.black_present) this.oppCb?.(true);
       })
-      .subscribe();
-
+      .subscribe((status: string) => {
+        console.log('[supabase] moves channel:', status, code);
+      });
     // Broadcast channel for draw/resign/clock
     this.broadcast = this.supabase
       .channel(`events:${code}`)

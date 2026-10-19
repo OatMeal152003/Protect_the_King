@@ -423,7 +423,8 @@ function showOnlineMenu() {
 function setupOnlineHandlers() {
   if (!adapter) return;
   adapter.onMove((m: NetMove) => {
-    if (!game || !boardView) { pendingMoves.push(m); return; }
+    if (!game || !boardView) { pendingMoves.push(m); console.log('[main] game not ready, queued move', m.from, m.to); return; }
+    console.log('[main] received move', m.from, m.to, 'turn=', game.turn());
     const mv = game.move(m.from, m.to, m.promotion);
     if (mv) {
       remoteMove = true;
