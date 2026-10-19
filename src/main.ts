@@ -104,7 +104,9 @@ function showMenu() {
   screen = 'menu';
   paused = false;
   introActive = false;
+  cinematicActive = false;
   pendingMoves = [];
+  if (clock) { clock.stop(); clock = null; }
   if (ai) { ai.terminate(); ai = null; }
   if (hudInterval) { clearInterval(hudInterval); hudInterval = null; }
   document.querySelectorAll('.game-menu-btn, .game-cam-btn').forEach((e) => e.remove());
@@ -766,6 +768,7 @@ async function startGame() {
   ctx.scene.background = new THREE.Color(SKINS[boardSkin].backgroundColor);
 
   if (gameMode === 'ai') { if (ai) ai.terminate(); ai = new AI(); }
+  if (clock) { clock.stop(); clock = null; }
   if (gameMode === 'timed' || gameMode === 'online') {
     // Online uses a fixed preset so both clients create the same clock.
     const preset = gameMode === 'online' ? { min: 10, inc: 0 } : timedPreset;
