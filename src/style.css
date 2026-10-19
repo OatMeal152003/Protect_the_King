@@ -66,7 +66,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
 .royal-banner::after { right: -6px; }
 .royal-banner .title {
   font-family: "Cinzel Decorative", "MedievalSharp", serif;
-  font-size: 1.35rem; font-weight: 800; letter-spacing: 2px;
+  font-size: 1.9rem; font-weight: 800; letter-spacing: 2px;
   color: var(--c-ivory); text-shadow: 0 2px 0 rgba(0,0,0,0.6), 0 0 8px rgba(255,215,0,0.3);
   line-height: 1.2;
 }
