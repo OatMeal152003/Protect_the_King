@@ -1,0 +1,66 @@
+import * as THREE from 'three';
+
+export interface PixelSettings {
+  width: number;
+  height: number;
+  posterize: boolean;
+  outline: boolean;
+}
+
+const DEFAULTS: PixelSettings = { width: 320, height: 180, posterize: false, outline: false };
+
+export function loadSettings(): PixelSettings {
+  try {
+    const raw = localStorage.getItem('ptk_settings');
+    if (raw) return { ...DEFAULTS, ...JSON.parse(raw) };
+  } catch { /* ignore */ }
+  return { ...DEFAULTS };
+}
+
+export function saveSettings(s: PixelSettings): void {
+  localStorage.setItem('ptk_settings', JSON.stringify(s));
+}
+
+export class PixelPipeline {
+  settings: PixelSettings;
+  target: THREE.WebGLRenderTarget;
+  quadScene: THREE.Scene;
+  quadCamera: THREE.OrthographicCamera;
+  quadMesh: THREE.Mesh;
+  material: THREE.ShaderMaterial;
+
+  constructor(settings?: PixelSettings) {
+    this.settings = settings ?? loadSettings();
+    this.target = new THREE.WebGLRenderTarget(this.settings.width, this.settings.height, {
+      minFilter: THREE.NearestFilter,
+      magFilter: THREE.NearestFilter,
+      format: THREE.RGBAFormat,
+    });
+    this.quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    this.quadScene = new THREE.Scene();
+    this.material = new THREE.ShaderMaterial({
+      uniforms: { tDiffuse: { value: this.target.texture }, uPosterize: { value: this.settings.posterize } },
+      vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+      fragmentShader: `uniform sampler2D tDiffuse; uniform bool uPosterize; varying vec2 vUv;
+        void main(){ vec4 c=texture2D(tDiffuse,vUv); if(uPosterize){ c.rgb=floor(c.rgb*4.0)/4.0; } gl_FragColor=c; }`,
+    });
+    const geo = new THREE.PlaneGeometry(2, 2);
+    this.quadMesh = new THREE.Mesh(geo, this.material);
+    this.quadScene.add(this.quadMesh);
+  }
+
+  resize(w: number, h: number): void {
+    this.settings.width = w;
+    this.settings.height = h;
+    this.target.setSize(w, h);
+  }
+
+  render(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera): void {
+    renderer.setRenderTarget(this.target);
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    this.material.uniforms.tDiffuse.value = this.target.texture;
+    this.material.uniforms.uPosterize.value = this.settings.posterize;
+    renderer.render(this.quadScene, this.quadCamera);
+  }
+}

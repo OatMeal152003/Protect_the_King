@@ -1,0 +1,112 @@
+import * as THREE from 'three';
+import { loadGLB } from './loader';
+import { squareCenter } from '../game/board';
+import { piecePath } from '../game/skins';
+import type { PieceType, PieceColor } from '../game/skins';
+
+const PIECE_CHAR: Record<string, PieceType> = {
+  p: 'pawn', r: 'rook', n: 'knight', b: 'bishop', q: 'queen', k: 'king',
+};
+
+export interface PieceMesh { mesh: THREE.Group; square: string; color: PieceColor; type: PieceType; }
+
+export class BoardView {
+  group: THREE.Group;
+  skin: string;
+  pieces = new Map<string, PieceMesh>(); // square -> piece
+  markers: THREE.Mesh[] = [];
+  markerGroup = new THREE.Group();
+
+  constructor(group: THREE.Group, skin: string) {
+    this.group = group;
+    this.skin = skin;
+    this.group.add(this.markerGroup);
+  }
+
+  setSkin(skin: string): void { this.skin = skin; }
+
+  clearPieces(): void {
+    for (const [, pm] of this.pieces) this.group.remove(pm.mesh);
+    this.pieces.clear();
+  }
+
+  async loadBoard(boardPath: string): Promise<THREE.Group> {
+    const b = await loadGLB(boardPath);
+    this.group.add(b);
+    return b;
+  }
+
+  async placeStart(): Promise<void> {
+    // Build from a FEN-ish starting position using chess.js default
+    const back = ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'];
+    // white back rank j=0, pawns j=1; black j=7, pawns j=6
+    const files = 'abcdefgh';
+    const placements: { sq: string; color: PieceColor; type: PieceType }[] = [];
+    for (let i = 0; i < 8; i++) {
+      placements.push({ sq: `${files[i]}2`, color: 'white', type: 'pawn' });
+      placements.push({ sq: `${files[i]}1`, color: 'white', type: PIECE_CHAR[back[i]] });
+      placements.push({ sq: `${files[i]}7`, color: 'black', type: 'pawn' });
+      placements.push({ sq: `${files[i]}8`, color: 'black', type: PIECE_CHAR[back[i]] });
+    }
+    for (const pl of placements) {
+      await this.addPiece(pl.sq, pl.color, pl.type);
+    }
+  }
+
+  async addPiece(square: string, color: PieceColor, type: PieceType): Promise<PieceMesh> {
+    const file = square.charCodeAt(0) - 97;
+    const rank = parseInt(square[1]) - 1;
+    const mesh = await loadGLB(piecePath(this.skin, color, type));
+    const c = squareCenter(file, rank);
+    mesh.position.set(c.x, c.y, c.z);
+    if (color === 'black') mesh.rotation.y = Math.PI;
+    this.group.add(mesh);
+    const pm: PieceMesh = { mesh, square, color, type };
+    this.pieces.set(square, pm);
+    return pm;
+  }
+
+  removePiece(square: string): PieceMesh | undefined {
+    const pm = this.pieces.get(square);
+    if (pm) { this.group.remove(pm.mesh); this.pieces.delete(square); }
+    return pm;
+  }
+
+  movePiece(from: string, to: string): PieceMesh | undefined {
+    const pm = this.pieces.get(from);
+    if (!pm) return;
+    this.pieces.delete(from);
+    // remove victim if present
+    const victim = this.pieces.get(to);
+    if (victim) { this.group.remove(victim.mesh); }
+    this.pieces.set(to, pm);
+    pm.square = to;
+    const file = to.charCodeAt(0) - 97;
+    const rank = parseInt(to[1]) - 1;
+    const c = squareCenter(file, rank);
+    pm.mesh.position.set(c.x, c.y, c.z);
+    return pm;
+  }
+
+  showLegalMoves(squares: string[]): void {
+    this.clearMarkers();
+    for (const sq of squares) {
+      const file = sq.charCodeAt(0) - 97;
+      const rank = parseInt(sq[1]) - 1;
+      const c = squareCenter(file, rank);
+      const geo = new THREE.CylinderGeometry(0.45, 0.45, 0.05, 24);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xffff66, transparent: true, opacity: 0.55 });
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(c.x, 0.03, c.z);
+      this.markerGroup.add(m);
+      this.markers.push(m);
+    }
+  }
+
+  clearMarkers(): void {
+    for (const m of this.markers) this.markerGroup.remove(m);
+    this.markers = [];
+  }
+
+  getPieceAt(square: string): PieceMesh | undefined { return this.pieces.get(square); }
+}

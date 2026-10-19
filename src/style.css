@@ -1,7 +1,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a12; color: #e8e8f0; font-family: "Press Start 2P", monospace, sans-serif; }
 #app { position: relative; width: 100%; height: 100%; }
-canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
+canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; }
 .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10,10,18,0.92); z-index: 10; }
 .overlay.hidden { display: none; }
 .loading-box { text-align: center; padding: 2rem; }
