@@ -22,7 +22,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext | null {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
   renderer.setPixelRatio(1);
   renderer.setSize(settings.width, settings.height, false);
-  renderer.setClearColor(0x0a0a12);
+  renderer.setClearColor(0x1a1a2e);
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(35, settings.width / settings.height, 0.1, 200);
@@ -37,10 +37,13 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext | null {
   controls.minDistance = 10;
   controls.maxDistance = 32;
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.75));
-  const dir = new THREE.DirectionalLight(0xffffff, 0.5);
+  scene.add(new THREE.AmbientLight(0xffffff, 1.1));
+  const dir = new THREE.DirectionalLight(0xffffff, 0.9);
   dir.position.set(6, 12, 6);
   scene.add(dir);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.4);
+  fill.position.set(-6, 8, -6);
+  scene.add(fill);
 
   const group = new THREE.Group();
   scene.add(group);
