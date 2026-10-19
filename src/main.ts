@@ -424,7 +424,6 @@ function setupOnlineHandlers() {
   if (!adapter) return;
   adapter.onMove((m: NetMove) => {
     if (!game || !boardView) { pendingMoves.push(m); return; }
-    console.log('online onMove', m.from, m.to, 'turn=', game.turn(), 'fen=', game.fen());
     const mv = game.move(m.from, m.to, m.promotion);
     if (mv) {
       remoteMove = true;
