@@ -59,7 +59,6 @@ export class BoardView {
     const mesh = await loadGLB(piecePath(this.skin, color, type));
     const c = squareCenter(file, rank);
     mesh.position.set(c.x, c.y, c.z);
-    if (color === 'black') mesh.rotation.y = Math.PI;
     this.group.add(mesh);
     const pm: PieceMesh = { mesh, square, color, type };
     this.pieces.set(square, pm);
