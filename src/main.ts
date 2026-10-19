@@ -607,6 +607,7 @@ async function startGame() {
   // HUD container
   ensureHUD();
   updateHUD();
+  hudUpdateTurn();
   if (playerColor === 'b') ctx.resetView(true);
   else ctx.resetView(false);
 
@@ -628,6 +629,7 @@ function ensureHUD() {
       <div id="clkW" style="flex:1;text-align:center;padding:6px;border-radius:4px;background:rgba(28,27,25,0.7);border:2px solid #C89B42;">W 10:00</div>
       <div id="clkB" style="flex:1;text-align:center;padding:6px;border-radius:4px;background:rgba(28,27,25,0.7);border:2px solid #C89B42;">B 10:00</div>
     </div>
+    <div id="turn" style="text-align:center;padding:4px 6px;margin-bottom:8px;border-radius:4px;font-size:0.95rem;letter-spacing:2px;color:#F2E9D5;background:rgba(28,27,25,0.5);border:1px solid rgba(200,155,66,0.3);">WHITE'S TURN</div>
     <div style="font-size:0.9rem;letter-spacing:2px;color:#C89B42;margin-bottom:4px;font-family:'Cinzel Decorative',serif;">MOVES</div>
     <div id="movelist" style="max-height:46vh;overflow:auto;line-height:1.9;padding-right:4px;"></div>
     <div style="font-size:0.9rem;letter-spacing:2px;color:#C89B42;margin:8px 0 4px;font-family:'Cinzel Decorative',serif;">CAPTURED</div>
@@ -739,6 +741,8 @@ function checkEndAndAI() {
   }
   // AI move
   if (gameMode === 'ai' && game.turn() !== playerColor[0] as 'w' | 'b' && !gameOver && !paused) {
+    const turnEl = document.getElementById('turn');
+    if (turnEl) turnEl.textContent = 'AI THINKING...';
     setTimeout(() => { if (!paused) doAIMove(); }, 300);
   }
   // (online send handled in applyMoveToBoard)
@@ -746,7 +750,22 @@ function checkEndAndAI() {
 }
 
 function hudUpdateTurn() {
-  // no-op extra
+  const turnEl = document.getElementById('turn');
+  if (!game) return;
+  const side = game.turn() === 'w' ? 'White' : 'Black';
+  const isCheck = game.isCheck();
+  if (turnEl) {
+    turnEl.textContent = isCheck ? `${side.toUpperCase()} IN CHECK!` : `${side.toUpperCase()}'S TURN`;
+    turnEl.style.color = isCheck ? '#ff5566' : '#F2E9D5';
+    turnEl.style.borderColor = isCheck ? '#ff3355' : 'rgba(200,155,66,0.3)';
+    turnEl.style.background = isCheck ? 'rgba(181,46,50,0.25)' : 'rgba(28,27,25,0.5)';
+  }
+  // highlight active clock
+  const w = document.getElementById('clkW'); const b = document.getElementById('clkB');
+  if (w) w.style.borderColor = game.turn() === 'w' ? '#ffd700' : 'rgba(200,155,66,0.4)';
+  if (b) b.style.borderColor = game.turn() === 'b' ? '#ffd700' : 'rgba(200,155,66,0.4)';
+  if (w) w.style.opacity = game.turn() === 'w' ? '1' : '0.6';
+  if (b) b.style.opacity = game.turn() === 'b' ? '1' : '0.6';
 }
 
 async function doAIMove() {
