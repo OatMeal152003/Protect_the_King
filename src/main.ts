@@ -462,41 +462,97 @@ function showSkinSelect() {
 function showSettings() {
   screen = 'settings';
   const o = overlay(`
-    <div class="menu-card">
-      <div class="title">SETTINGS</div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;align-items:center;">
-        <label>Graphics:
-          <select id="gfx">
-            <option value="pixel" ${ctx.graphicsMode() === 'pixel' ? 'selected' : ''}>Pixelated (retro)</option>
-            <option value="smooth" ${ctx.graphicsMode() === 'smooth' ? 'selected' : ''}>Smooth (native)</option>
-          </select>
-        </label>
-        <label>Pixel width: <input id="pw" type="number" value="${settings.width}" style="width:70px;" /></label>
-        <label>Pixel height: <input id="ph" type="number" value="${settings.height}" style="width:70px;" /></label>
-        <label>Cinematics:
-          <select id="cine">
-            <option value="on" ${cinematicsMode === 'on' ? 'selected' : ''}>On</option>
-            <option value="short" ${cinematicsMode === 'short' ? 'selected' : ''}>Short</option>
-            <option value="off" ${cinematicsMode === 'off' ? 'selected' : ''}>Off</option>
-          </select>
-        </label>
-        <label><input type="checkbox" id="vol" ${volumeOn ? 'checked' : ''} /> Sound</label>
-        <button data-act="back">Back</button>
+    <div class="main-menu">
+      <div class="menu-layout" style="grid-template-columns: minmax(260px, 320px) 1fr; max-width:1000px; margin:0 auto;">
+        <div class="left-col" style="justify-content:center;">
+          <div class="royal-banner">
+            <div class="title">SETTINGS</div>
+            <div class="subtitle">GAME OPTIONS</div>
+          </div>
+          <div style="margin-top:14px;">
+            <button class="med-btn" data-act="back" style="justify-content:center;">BACK</button>
+          </div>
+        </div>
+        <div class="right-col" style="align-items:stretch;justify-content:center;">
+          <div class="quick-panel" style="flex:1;">
+            <div class="panel-title">CONFIGURE</div>
+
+            <div class="mode-section">
+              <div class="mode-name">GRAPHICS</div>
+              <div class="mode-desc">Rendering mode.</div>
+              <div class="mode-options" style="flex-direction:column;gap:8px;">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                  <input type="radio" name="gfx" value="smooth" ${ctx.graphicsMode() === 'smooth' ? 'checked' : ''} /> Smooth (native, anti-aliased)
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                  <input type="radio" name="gfx" value="pixel" ${ctx.graphicsMode() === 'pixel' ? 'checked' : ''} /> Pixelated (retro)
+                </label>
+              </div>
+              <div id="pixopts" style="margin-top:8px;display:${ctx.graphicsMode() === 'pixel' ? 'block' : 'none'};">
+                <label style="display:block;margin:4px 0;">Pixel width: <input id="pw" type="number" value="${settings.width}" style="width:80px;" /></label>
+                <label style="display:block;margin:4px 0;">Pixel height: <input id="ph" type="number" value="${settings.height}" style="width:80px;" /></label>
+              </div>
+            </div>
+
+            <div class="mode-section" style="margin-top:14px;">
+              <div class="mode-name">CINEMATICS</div>
+              <div class="mode-desc">Capture animations.</div>
+              <select id="cine" style="width:100%;">
+                <option value="on" ${cinematicsMode === 'on' ? 'selected' : ''}>On (full)</option>
+                <option value="short" ${cinematicsMode === 'short' ? 'selected' : ''}>Short</option>
+                <option value="off" ${cinematicsMode === 'off' ? 'selected' : ''}>Off (skip)</option>
+              </select>
+            </div>
+
+            <div class="mode-section" style="margin-top:14px;">
+              <div class="mode-name">AUDIO</div>
+              <div class="mode-desc">Sound effects.</div>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="vol" ${volumeOn ? 'checked' : ''} /> Sound enabled
+              </label>
+            </div>
+
+            <div style="margin-top:16px;display:flex;gap:8px;">
+              <button class="med-btn" data-act="apply" style="flex:1;justify-content:center;">APPLY</button>
+              <button class="med-btn" data-act="reset" style="flex:1;justify-content:center;">RESET DEFAULTS</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>`);
-  o.querySelector('[data-act="back"]')?.addEventListener('click', () => {
-    settings.width = parseInt((o.querySelector('#pw') as HTMLInputElement).value) || 640;
-    settings.height = parseInt((o.querySelector('#ph') as HTMLInputElement).value) || 360;
+
+  const gfxRadios = o.querySelectorAll('input[name="gfx"]') as NodeListOf<HTMLInputElement>;
+  const pixopts = o.querySelector('#pixopts') as HTMLDivElement;
+  gfxRadios.forEach((r) => r.addEventListener('change', () => {
+    if (pixopts) pixopts.style.display = (o.querySelector('input[name="gfx"]:checked') as HTMLInputElement)?.value === 'pixel' ? 'block' : 'none';
+  }));
+
+  o.querySelector('[data-act="apply"]')?.addEventListener('click', () => {
+    SFX.click();
+    settings.width = parseInt((o.querySelector('#pw') as HTMLInputElement)?.value || '640') || 640;
+    settings.height = parseInt((o.querySelector('#ph') as HTMLInputElement)?.value || '360') || 360;
     saveSettings(settings);
-    const gfx = (o.querySelector('#gfx') as HTMLSelectElement).value as 'pixel' | 'smooth';
+    const gfx = (o.querySelector('input[name="gfx"]:checked') as HTMLInputElement)?.value as 'pixel' | 'smooth';
     ctx.applyGraphicsMode(gfx);
     cinematicsMode = (o.querySelector('#cine') as HTMLSelectElement).value as any;
     localStorage.setItem('ptk_cine', cinematicsMode);
     volumeOn = (o.querySelector('#vol') as HTMLInputElement).checked;
     localStorage.setItem('ptk_vol', volumeOn ? '1' : '0');
-    SFX.click();
-    showMenu();
+    showToast('Settings applied.');
   });
+  o.querySelector('[data-act="reset"]')?.addEventListener('click', () => {
+    SFX.click();
+    settings = { width: 640, height: 360, posterize: false, outline: false };
+    saveSettings(settings);
+    ctx.applyGraphicsMode('smooth');
+    cinematicsMode = 'on';
+    localStorage.setItem('ptk_cine', cinematicsMode);
+    volumeOn = true;
+    localStorage.setItem('ptk_vol', '1');
+    showSettings();
+    showToast('Reset to defaults.');
+  });
+  o.querySelector('[data-act="back"]')?.addEventListener('click', () => { SFX.click(); showMenu(); });
 }
 
 function showBattleIntro() {
