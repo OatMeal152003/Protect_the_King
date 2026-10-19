@@ -11,10 +11,13 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
   width: min(380px, 86vw); padding: 48px 50px; height: 100%;
   background: linear-gradient(180deg, rgba(14,11,24,0.42), rgba(8,6,16,0.55));
   border-right: 1px solid rgba(255,215,0,0.35);
-  box-shadow: 8px 0 40px rgba(0,0,0,0.55); backdrop-filter: blur(2px); }
+  box-shadow: 8px 0 40px rgba(0,0,0,0.55); backdrop-filter: blur(2px);
+  animation: menuSlideIn 0.45s ease-out both; }
+@keyframes menuSlideIn { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
 .menu-panel .title { font-size: 2.4rem; line-height: 1.15; letter-spacing: 6px; color: #ffd700;
   font-family: "Cinzel", serif; font-weight: 800;
-  text-shadow: 0 0 18px rgba(255,215,0,0.55), 0 2px 0 rgba(0,0,0,0.7); margin-bottom: 4px; }
+  text-shadow: 0 0 18px rgba(255,215,0,0.55), 0 2px 0 rgba(0,0,0,0.7); margin-bottom: 4px;
+  border-bottom: 1px solid rgba(255,215,0,0.35); padding-bottom: 14px; }
 .menu-panel .subtitle { font-size: 0.85rem; letter-spacing: 4px; color: rgba(240,234,255,0.6); margin-bottom: 34px;
   font-family: "Rajdhani", sans-serif; font-weight: 500; }
 .menu-btn { display: block; width: 100%; margin: 6px 0; padding: 14px 18px;
