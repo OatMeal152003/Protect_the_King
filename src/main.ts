@@ -51,6 +51,7 @@ let gameOver = false;
 let remoteMove = false;
 // captured tracking (placeholder)
 let moveHistory: string[] = [];
+let capturedPieces: string[] = [];
 
 // ---- DOM helpers ----
 function clearOverlays() { document.querySelectorAll('.overlay').forEach((o) => o.remove()); }
@@ -287,7 +288,7 @@ async function startGame() {
   // clear group
   while (ctx.group.children.length) ctx.group.remove(ctx.group.children[0]);
   ctx.group.add(boardView.markerGroup);
-  moveHistory = []; gameOver = false; selected = null;
+  moveHistory = []; capturedPieces = []; gameOver = false; selected = null;
 
   loading.classList.remove('hidden');
   loadingText.textContent = 'Loading board...';
@@ -322,10 +323,14 @@ function ensureHUD() {
   if (h) return;
   h = document.createElement('div');
   h.id = 'gamehud';
-  h.style.cssText = 'position:fixed;bottom:8px;left:8px;right:8px;display:flex;justify-content:space-between;color:#fff;font-family:monospace;font-size:11px;z-index:5;pointer-events:none;';
-  h.innerHTML = `<div id="clkW">W: --</div><div id="movelist" style="max-width:40%;overflow:auto;max-height:80px;pointer-events:auto;"></div><div id="clkB">B: --</div>`;
+  h.style.cssText = 'position:fixed;top:8px;right:8px;width:200px;max-height:90vh;overflow:auto;background:rgba(10,10,18,0.75);border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:10px;color:#fff;font-family:monospace;font-size:11px;z-index:5;';
+  h.innerHTML = `
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span id="clkW">W: --</span><span id="clkB">B: --</span></div>
+    <div style="font-weight:bold;margin-bottom:4px;">Moves</div>
+    <div id="movelist" style="max-height:50vh;overflow:auto;line-height:1.6;"></div>
+    <div style="font-weight:bold;margin:6px 0 4px;">Captured</div>
+    <div id="captured" style="min-height:20px;"></div>`;
   document.body.appendChild(h);
-  // clock update loop
   setInterval(() => {
     if (clock && !gameOver) {
       const w = document.getElementById('clkW'); const b = document.getElementById('clkB');
@@ -337,7 +342,19 @@ function ensureHUD() {
 
 function updateHUD() {
   const ml = document.getElementById('movelist');
-  if (ml) ml.textContent = moveHistory.join(' ');
+  if (ml) {
+    let html = '';
+    for (let i = 0; i < moveHistory.length; i += 2) {
+      const n = Math.floor(i / 2) + 1;
+      const w = moveHistory[i] || '';
+      const b = moveHistory[i + 1] || '';
+      html += `<div><span style="opacity:0.6;">${n}.</span> ${w} ${b}</div>`;
+    }
+    ml.innerHTML = html;
+    ml.scrollTop = ml.scrollHeight;
+  }
+  const cap = document.getElementById('captured');
+  if (cap) cap.textContent = capturedPieces.join(' ');
 }
 
 // ---- Move application ----
@@ -350,7 +367,7 @@ function applyMoveToBoard(from: string, to: string, mv: any, _isCapture: boolean
 
   const doApply = () => {
     if (isCaptureMove && victim) {
-      // track captured (placeholder)
+      capturedPieces.push(victim.type);
     }
     if (promo) {
       // replace pawn mesh with promoted piece
@@ -499,8 +516,10 @@ canvas.addEventListener('click', (e) => {
       const pm = boardView.getPieceAt(sq);
       if (pm && ((pm.color === 'white') === (game.turn() === 'w'))) {
         selected = sq;
-        const mv = game.moves(sq).map((m: any) => m.to);
-        boardView.showLegalMoves(mv);
+        const moves = game.moves(sq);
+        const sqs = moves.map((m: any) => m.to);
+        const caps = new Set(moves.filter((m: any) => m.flags && (m.flags.includes('c') || m.flags.includes('e'))).map((m: any) => m.to));
+        boardView.showLegalMoves(sqs, caps);
       } else {
         selected = null;
         boardView.clearMarkers();
@@ -510,8 +529,10 @@ canvas.addEventListener('click', (e) => {
     const pm = boardView.getPieceAt(sq);
     if (pm && ((pm.color === 'white') === (game.turn() === 'w'))) {
       selected = sq;
-      const mv = game.moves(sq).map((m: any) => m.to);
-      boardView.showLegalMoves(mv);
+      const moves = game.moves(sq);
+      const sqs = moves.map((m: any) => m.to);
+      const caps = new Set(moves.filter((m: any) => m.flags && (m.flags.includes('c') || m.flags.includes('e'))).map((m: any) => m.to));
+      boardView.showLegalMoves(sqs, caps);
     }
   }
 });

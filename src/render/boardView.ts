@@ -88,18 +88,27 @@ export class BoardView {
     return pm;
   }
 
-  showLegalMoves(squares: string[]): void {
+  showLegalMoves(squares: string[], captures: Set<string> = new Set()): void {
     this.clearMarkers();
     for (const sq of squares) {
       const file = sq.charCodeAt(0) - 97;
       const rank = parseInt(sq[1]) - 1;
       const c = squareCenter(file, rank);
-      const geo = new THREE.CylinderGeometry(0.45, 0.45, 0.05, 24);
-      const mat = new THREE.MeshBasicMaterial({ color: 0xffff66, transparent: true, opacity: 0.55 });
+      const isCap = captures.has(sq);
+      const geo = new THREE.CylinderGeometry(isCap ? 0.5 : 0.4, isCap ? 0.5 : 0.4, 0.06, 24);
+      const mat = new THREE.MeshBasicMaterial({ color: isCap ? 0xff3355 : 0x44ff88, transparent: true, opacity: 0.6 });
       const m = new THREE.Mesh(geo, mat);
       m.position.set(c.x, 0.03, c.z);
       this.markerGroup.add(m);
       this.markers.push(m);
+      if (isCap) {
+        // inner ring indicator
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.05, 8, 24), new THREE.MeshBasicMaterial({ color: 0xff3355 }));
+        ring.rotation.x = Math.PI / 2;
+        ring.position.set(c.x, 0.04, c.z);
+        this.markerGroup.add(ring);
+        this.markers.push(ring);
+      }
     }
   }
 

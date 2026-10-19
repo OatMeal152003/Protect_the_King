@@ -32,7 +32,8 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext | null {
   const scene = new THREE.Scene();
   const aspect = smooth ? (window.innerWidth / window.innerHeight) : (settings.width / settings.height);
   const camera = new THREE.PerspectiveCamera(35, aspect, 0.1, 200);
-  camera.position.set(0, 14, 16);
+  // White plays from the negative-Z side: camera starts there so white is "below".
+  camera.position.set(0, 14, -16);
   camera.lookAt(0, 0, 0);
 
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -55,8 +56,8 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext | null {
   scene.add(group);
 
   const resetView = (blackSide = false) => {
-    if (blackSide) camera.position.set(0, 14, -16);
-    else camera.position.set(0, 14, 16);
+    if (blackSide) camera.position.set(0, 14, 16);   // black's side (+Z)
+    else camera.position.set(0, 14, -16);            // white's side (-Z)
     controls.target.set(0, 0, 0);
     controls.update();
   };

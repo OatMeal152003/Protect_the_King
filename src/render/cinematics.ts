@@ -93,11 +93,33 @@ function animateAttack(attacker: THREE.Group, type: string, ms: number): Promise
     const t0 = performance.now();
     const step = () => {
       const t = Math.min(1, (performance.now() - t0) / ms);
-      // lunge forward + squash
-      const lunge = Math.sin(t * Math.PI) * 0.6;
-      attacker.position.z = startPos.z + (type === 'knight' ? lunge * 1.5 : lunge);
-      attacker.scale.set(1 + 0.15 * Math.sin(t * Math.PI), 1 - 0.1 * Math.sin(t * Math.PI), 1 + 0.15 * Math.sin(t * Math.PI));
-      attacker.rotation.y = startRot.y + (type === 'queen' ? t * Math.PI * 2 : t * 0.4);
+      const pulse = Math.sin(t * Math.PI);
+      if (type === 'knight') {
+        attacker.position.z = startPos.z + pulse * 1.4;
+        attacker.rotation.y = startRot.y + pulse * 0.8;
+        attacker.scale.set(1 + 0.1 * pulse, 1 - 0.15 * pulse, 1 + 0.1 * pulse);
+      } else if (type === 'rook') {
+        attacker.position.y = startPos.y + pulse * 0.6;
+        attacker.scale.set(1 + 0.2 * pulse, 1 - 0.25 * pulse, 1 + 0.2 * pulse);
+      } else if (type === 'bishop') {
+        attacker.scale.set(1 + 0.25 * pulse, 1 + 0.25 * pulse, 1 + 0.25 * pulse);
+        attacker.rotation.y = startRot.y + pulse * 1.2;
+      } else if (type === 'queen') {
+        attacker.rotation.y = startRot.y + t * Math.PI * 2;
+        attacker.position.z = startPos.z + pulse * 0.8;
+        attacker.scale.set(1 + 0.12 * pulse, 1 - 0.08 * pulse, 1 + 0.12 * pulse);
+      } else if (type === 'pawn') {
+        attacker.position.z = startPos.z + pulse * 0.9;
+        attacker.rotation.x = startRot.x + pulse * 0.5;
+        attacker.scale.set(1 + 0.08 * pulse, 1 - 0.12 * pulse, 1 + 0.08 * pulse);
+      } else if (type === 'king') {
+        attacker.position.z = startPos.z + pulse * 0.5;
+        attacker.scale.set(1 + 0.18 * pulse, 1 - 0.18 * pulse, 1 + 0.18 * pulse);
+        attacker.rotation.y = startRot.y + pulse * 0.3;
+      } else {
+        attacker.position.z = startPos.z + pulse * 0.6;
+        attacker.scale.set(1 + 0.15 * pulse, 1 - 0.1 * pulse, 1 + 0.15 * pulse);
+      }
       if (t < 1) requestAnimationFrame(step);
       else {
         attacker.scale.set(1, 1, 1);
