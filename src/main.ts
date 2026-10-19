@@ -57,6 +57,28 @@ let capturedPieces: string[] = [];
 
 // ---- DOM helpers ----
 function clearOverlays() { document.querySelectorAll('.overlay').forEach((o) => o.remove()); }
+function showConfirm(msg: string, onYes: () => void): void {
+  const o = overlay(`
+    <div class="menu-card">
+      <div class="title" style="font-size:1.1rem;">CONFIRM</div>
+      <div style="margin:12px 0 18px;font-size:1rem;color:#F2E9D5;text-align:center;">${msg}</div>
+      <div style="display:flex;gap:8px;">
+        <button data-act="yes">YES</button>
+        <button data-act="no">NO</button>
+      </div>
+    </div>`);
+  o.querySelector('[data-act="yes"]')?.addEventListener('click', () => { SFX.click(); clearOverlays(); onYes(); });
+  o.querySelector('[data-act="no"]')?.addEventListener('click', () => { SFX.click(); clearOverlays(); });
+}
+function showAlert(msg: string): void {
+  const o = overlay(`
+    <div class="menu-card">
+      <div class="title" style="font-size:1.1rem;">NOTICE</div>
+      <div style="margin:12px 0 18px;font-size:1rem;color:#F2E9D5;text-align:center;">${msg}</div>
+      <button data-act="ok">OK</button>
+    </div>`);
+  o.querySelector('[data-act="ok"]')?.addEventListener('click', () => { SFX.click(); clearOverlays(); });
+}
 function overlay(html: string): HTMLDivElement {
   clearOverlays();
   const d = document.createElement('div');
@@ -273,7 +295,7 @@ function showOnlineMenu() {
     SFX.click();
     adapter = createAdapter();
     const code = await adapter.createRoom();
-    alert('Room code: ' + code + ' (share it). Waiting for opponent...');
+    showAlert('Room code: ' + code + ' (share it). Waiting for opponent...');
     gameMode = 'online';
     playerColor = 'w';
     setupOnlineHandlers();
@@ -282,7 +304,7 @@ function showOnlineMenu() {
   o.querySelector('[data-act="join"]')?.addEventListener('click', async () => {
     SFX.click();
     const code = (o.querySelector('#joincode') as HTMLInputElement).value.trim().toUpperCase();
-    if (code.length < 4) { alert('Enter a code'); return; }
+    if (code.length < 4) { showAlert('Enter a code'); return; }
     adapter = createAdapter();
     await adapter.joinRoom(code);
     gameMode = 'online';
@@ -305,7 +327,7 @@ function setupOnlineHandlers() {
     checkEndAndAI();
   });
   adapter.onResign(() => { endGame('Opponent resigned. You win!'); });
-  adapter.onDrawOffer(() => { if (confirm('Draw offered. Accept?')) endGame('Draw agreed.'); });
+  adapter.onDrawOffer(() => { showConfirm('Draw offered. Accept?', () => endGame('Draw agreed.')); });
 }
 
 let skinPreviewRenderer: THREE.WebGLRenderer | null = null;
