@@ -100,10 +100,9 @@ export class SupabaseAdapter implements NetAdapter {
       fen: m.fen,
       white_ms: m.whiteMs ?? 0,
       black_ms: m.blackMs ?? 0,
-    }).then(({ data, error }) => {
+    }).select('id').single().then(({ data, error }) => {
       if (error) { console.error('sendMove failed', error); return; }
-      const row: any = Array.isArray(data) ? data[0] : data;
-      if (row?.id) this.lastMoveId = row.id;
+      if (data?.id) this.lastMoveId = data.id;
     });
   }
 
