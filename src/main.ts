@@ -51,6 +51,7 @@ let selected: string | null = null;
 let gameOver = false;
 let paused = false;
 let introActive = false;
+let cinematicActive = false;
 let remoteMove = false;
 let hudInterval: ReturnType<typeof setInterval> | null = null;
 // captured tracking (placeholder)
@@ -427,24 +428,28 @@ function setupOnlineHandlers() {
     console.log('[main] received move', m.from, m.to, 'turn=', game.turn());
     const mv = game.move(m.from, m.to, m.promotion);
     if (mv) {
+      // Adopt the sender's clock snapshot BEFORE switchTo adds this move's increment.
+      if (clock && m.whiteMs != null && m.blackMs != null) {
+        clock.whiteMs = m.whiteMs;
+        clock.blackMs = m.blackMs;
+      }
       remoteMove = true;
       applyMoveToBoard(m.from, m.to, mv, !!mv.flags?.includes('c') || !!mv.flags?.includes('e'));
       remoteMove = false;
     } else if (game.fen() !== m.fen) {
       console.warn('online: move illegal/out of sync', { from: m.from, to: m.to, turn: game.turn(), fen: game.fen(), targetFen: m.fen });
+      if (clock && m.whiteMs != null && m.blackMs != null) {
+        clock.whiteMs = m.whiteMs;
+        clock.blackMs = m.blackMs;
+      }
       game.load(m.fen);
       boardView.loadPosition(m.fen).then(() => {
         boardView!.showLastMove(m.from, m.to);
         updateHUD();
       });
-    } else {
-      // already in sync (duplicate event) - nothing to do
+      checkEndAndAI();
     }
-    if (clock && m.whiteMs != null && m.blackMs != null) {
-      clock.whiteMs = m.whiteMs;
-      clock.blackMs = m.blackMs;
-    }
-    checkEndAndAI();
+    // When mv was applied, applyMoveToBoard() already ran checkEndAndAI().
   });
   adapter.onClock((w: number, b: number) => {
     if (!clock) return;
@@ -694,7 +699,7 @@ function showGameMenuButton() {
         </div>`);
       o.querySelector('[data-act="draw"]')?.addEventListener('click', () => { SFX.click(); adapter?.offerDraw(); clearOverlays(); });
       o.querySelector('[data-act="resign"]')?.addEventListener('click', () => { SFX.click(); adapter?.resign(); endGame('You resigned.'); });
-      o.querySelector('[data-act="leave"]')?.addEventListener('click', () => { SFX.click(); showMenu(); });
+      o.querySelector('[data-act="leave"]')?.addEventListener('click', () => { SFX.click(); adapter?.disconnect(); showMenu(); });
       o.querySelector('[data-act="cancel"]')?.addEventListener('click', () => { SFX.click(); clearOverlays(); });
     } else {
       togglePause();
@@ -745,7 +750,7 @@ async function startGame() {
   // clear group
   while (ctx.group.children.length) ctx.group.remove(ctx.group.children[0]);
   ctx.group.add(boardView.markerGroup);
-  moveHistory = []; capturedPieces = []; gameOver = false; selected = null;
+  moveHistory = []; capturedPieces = []; gameOver = false; selected = null; cinematicActive = false;
 
   loading.classList.remove('hidden');
   loadingText.textContent = 'Loading board...';
@@ -762,7 +767,9 @@ async function startGame() {
 
   if (gameMode === 'ai') { if (ai) ai.terminate(); ai = new AI(); }
   if (gameMode === 'timed' || gameMode === 'online') {
-    clock = new Clock(timedPreset.min, timedPreset.inc);
+    // Online uses a fixed preset so both clients create the same clock.
+    const preset = gameMode === 'online' ? { min: 10, inc: 0 } : timedPreset;
+    clock = new Clock(preset.min, preset.inc);
     clock.onFlag = (color) => endGame(color === 'w' ? 'Black wins on time' : 'White wins on time');
   } else {
     clock = null;
@@ -778,16 +785,17 @@ async function startGame() {
     for (const m of queued) {
       const mv = game!.move(m.from, m.to, m.promotion);
       if (mv) {
+        if (clock && m.whiteMs != null && m.blackMs != null) { clock.whiteMs = m.whiteMs; clock.blackMs = m.blackMs; }
         remoteMove = true;
         applyMoveToBoard(m.from, m.to, mv, !!mv.flags?.includes('c') || !!mv.flags?.includes('e'));
         remoteMove = false;
       } else if (game!.fen() !== m.fen) {
+        if (clock && m.whiteMs != null && m.blackMs != null) { clock.whiteMs = m.whiteMs; clock.blackMs = m.blackMs; }
         game!.load(m.fen);
         boardView!.loadPosition(m.fen).then(() => { boardView!.showLastMove(m.from, m.to); updateHUD(); });
+        checkEndAndAI();
       }
-      if (clock && m.whiteMs != null && m.blackMs != null) { clock.whiteMs = m.whiteMs; clock.blackMs = m.blackMs; }
     }
-    checkEndAndAI();
   }
   if (playerColor === 'b') ctx.resetView(true);
   else ctx.resetView(false);
@@ -855,6 +863,7 @@ function applyMoveToBoard(from: string, to: string, mv: any, _isCapture: boolean
   const wasRemote = remoteMove;
 
   const doApply = () => {
+    clock?.resume();
     if (isCaptureMove) {
       if (victim) capturedPieces.push(victim.type);
       else if (mv.flags?.includes('e')) capturedPieces.push('pawn');
@@ -893,9 +902,9 @@ function applyMoveToBoard(from: string, to: string, mv: any, _isCapture: boolean
   const shortMode = cinematicsMode === 'short' || gameMode === 'timed';
   if (cinematicsOn && piece) {
     const victimMesh = victim?.mesh || null;
-    // lock input via gameOver-ish flag
-    // lock input during cinematic (gameOver stays false)
-    // run async
+    // freeze the clock and input while the capture cinematic plays
+    clock?.pause();
+    cinematicActive = true;
     playCapture(
       { scene: ctx.scene, camera: ctx.camera, controls: ctx.controls, group: ctx.group },
       piece.mesh,
@@ -904,6 +913,11 @@ function applyMoveToBoard(from: string, to: string, mv: any, _isCapture: boolean
       SKINS[pieceSkin].effectColor,
       shortMode,
     ).then(() => {
+      cinematicActive = false;
+      doApply();
+      checkEndAndAI();
+    }).catch(() => {
+      cinematicActive = false;
       doApply();
       checkEndAndAI();
     });
@@ -1003,7 +1017,7 @@ function endGame(msg: string) {
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 canvas.addEventListener('click', (e) => {
-  if (screen !== 'game' || gameOver || paused || introActive) return;
+  if (screen !== 'game' || gameOver || paused || introActive || cinematicActive) return;
   if (gameMode === 'online' && game && game.turn() !== playerColor[0]) return;
   // ignore if cinematics running? simple: allow
   const rect = canvas.getBoundingClientRect();

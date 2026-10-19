@@ -43,16 +43,24 @@ export class SupabaseAdapter implements NetAdapter {
 
   async joinRoom(code: string): Promise<void> {
     this.code = code.toUpperCase();
-    const { error } = await this.supabase.from('rooms').update({ black_present: true }).eq('code', this.code);
-    if (error) throw error;
+    const { data, error } = await this.supabase
+      .from('rooms')
+      .update({ black_present: true })
+      .eq('code', this.code)
+      .eq('black_present', false)
+      .select('code')
+      .single();
+    if (error || !data) throw new Error('Room not found or already full');
     this.subscribe(this.code);
   }
 
   async listOpenRooms(): Promise<{ code: string; created_at: string }[]> {
+    const cutoff = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     const { data, error } = await this.supabase
       .from('rooms')
       .select('code, created_at')
       .eq('black_present', false)
+      .gte('created_at', cutoff)
       .order('created_at', { ascending: false })
       .limit(20);
     if (error) return [];
