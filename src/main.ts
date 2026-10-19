@@ -244,6 +244,12 @@ function showSettings() {
     <div class="loading-box">
       <div class="title">SETTINGS</div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;align-items:center;">
+        <label>Graphics:
+          <select id="gfx">
+            <option value="pixel" ${ctx.graphicsMode() === 'pixel' ? 'selected' : ''}>Pixelated (retro)</option>
+            <option value="smooth" ${ctx.graphicsMode() === 'smooth' ? 'selected' : ''}>Smooth (native)</option>
+          </select>
+        </label>
         <label>Pixel width: <input id="pw" type="number" value="${settings.width}" style="width:70px;" /></label>
         <label>Pixel height: <input id="ph" type="number" value="${settings.height}" style="width:70px;" /></label>
         <label>Cinematics:
@@ -258,10 +264,11 @@ function showSettings() {
       </div>
     </div>`);
   o.querySelector('[data-act="back"]')?.addEventListener('click', () => {
-    settings.width = parseInt((o.querySelector('#pw') as HTMLInputElement).value) || 320;
-    settings.height = parseInt((o.querySelector('#ph') as HTMLInputElement).value) || 180;
-    ctx.applyPixelSize(settings.width, settings.height);
+    settings.width = parseInt((o.querySelector('#pw') as HTMLInputElement).value) || 640;
+    settings.height = parseInt((o.querySelector('#ph') as HTMLInputElement).value) || 360;
     saveSettings(settings);
+    const gfx = (o.querySelector('#gfx') as HTMLSelectElement).value as 'pixel' | 'smooth';
+    ctx.applyGraphicsMode(gfx);
     cinematicsMode = (o.querySelector('#cine') as HTMLSelectElement).value as any;
     localStorage.setItem('ptk_cine', cinematicsMode);
     volumeOn = (o.querySelector('#vol') as HTMLInputElement).checked;

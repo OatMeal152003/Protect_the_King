@@ -10,6 +10,8 @@ export interface SceneContext {
   group: THREE.Group;
   resetView: (blackSide?: boolean) => void;
   applyPixelSize: (w: number, h: number) => void;
+  applyGraphicsMode: (mode: 'pixel' | 'smooth') => void;
+  graphicsMode: () => 'pixel' | 'smooth';
 }
 
 export function createScene(canvas: HTMLCanvasElement): SceneContext | null {
@@ -19,13 +21,17 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext | null {
   } catch { return null; }
 
   const settings = loadSettings();
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
-  renderer.setPixelRatio(1);
-  renderer.setSize(settings.width, settings.height, false);
+  const smooth = (localStorage.getItem('ptk_gfx') || 'smooth') === 'smooth';
+  canvas.style.imageRendering = smooth ? 'auto' : 'pixelated';
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: smooth, alpha: false });
+  renderer.setPixelRatio(smooth ? Math.min(window.devicePixelRatio, 2) : 1);
+  if (smooth) renderer.setSize(window.innerWidth, window.innerHeight, false);
+  else renderer.setSize(settings.width, settings.height, false);
   renderer.setClearColor(0x1a1a2e);
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(35, settings.width / settings.height, 0.1, 200);
+  const aspect = smooth ? (window.innerWidth / window.innerHeight) : (settings.width / settings.height);
+  const camera = new THREE.PerspectiveCamera(35, aspect, 0.1, 200);
   camera.position.set(0, 14, 16);
   camera.lookAt(0, 0, 0);
 
@@ -56,16 +62,35 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext | null {
   };
 
   const applyPixelSize = (w: number, h: number) => {
+    if ((localStorage.getItem('ptk_gfx') || 'smooth') === 'smooth') return;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   };
 
+  const applyGraphicsMode = (mode: 'pixel' | 'smooth') => {
+    localStorage.setItem('ptk_gfx', mode);
+    canvas.style.imageRendering = mode === 'pixel' ? 'pixelated' : 'auto';
+    if (mode === 'smooth') {
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight, false);
+      camera.aspect = window.innerWidth / window.innerHeight;
+    } else {
+      renderer.setPixelRatio(1);
+      const s = loadSettings();
+      renderer.setSize(s.width, s.height, false);
+      camera.aspect = s.width / s.height;
+    }
+    camera.updateProjectionMatrix();
+  };
+
+  const graphicsMode = (): 'pixel' | 'smooth' => (localStorage.getItem('ptk_gfx') || 'smooth') as 'pixel' | 'smooth';
+
   window.addEventListener('resize', () => {
     // keep pixel resolution; CSS handles display size
   });
 
-  return { scene, camera, renderer, controls, group, resetView, applyPixelSize };
+  return { scene, camera, renderer, controls, group, resetView, applyPixelSize, applyGraphicsMode, graphicsMode };
 }
 
 export function renderLoop(ctx: SceneContext, onFrame?: () => void): void {
