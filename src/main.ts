@@ -684,7 +684,7 @@ function endGame(msg: string) {
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 canvas.addEventListener('click', (e) => {
-  if (screen !== 'game' || gameOver) return;
+  if (screen !== 'game' || gameOver || paused) return;
   // ignore if cinematics running? simple: allow
   const rect = canvas.getBoundingClientRect();
   mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
