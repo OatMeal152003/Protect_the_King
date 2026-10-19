@@ -321,7 +321,7 @@ function showSkinSelect() {
   stopSkinPreview();
   const o = overlay(`
     <div class="main-menu">
-      <div class="menu-layout" style="grid-template-columns: minmax(300px, 420px) 1fr;">
+      <div class="menu-layout" style="grid-template-columns: minmax(260px, 340px) 1fr; max-width:1100px; margin:0 auto;">
         <div class="left-col" style="justify-content:center;">
           <div class="royal-banner">
             <div class="title">SKINS &amp; BOARDS</div>

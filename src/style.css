@@ -39,9 +39,10 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
 
 .menu-layout {
   display: grid;
-  grid-template-columns: minmax(260px, 320px) 1fr minmax(300px, 360px);
-  gap: 16px;
-  width: 100%; height: 100%;
+  grid-template-columns: minmax(240px, 280px) 1fr minmax(260px, 300px);
+  gap: 20px;
+  width: 100%; max-width: 1180px; height: 100%;
+  margin: 0 auto;
   padding: 24px 28px;
   align-items: stretch;
 }
