@@ -427,6 +427,10 @@ function setupOnlineHandlers() {
     remoteMove = true;
     applyMoveToBoard(m.from, m.to, mv, false);
     remoteMove = false;
+    if (clock && m.whiteMs != null && m.blackMs != null) {
+      clock.whiteMs = m.whiteMs;
+      clock.blackMs = m.blackMs;
+    }
     checkEndAndAI();
   });
   adapter.onClock((w: number, b: number) => {
@@ -848,7 +852,7 @@ function applyMoveToBoard(from: string, to: string, mv: any, _isCapture: boolean
       const side = game!.turn() === 'w' ? 'white' : 'black';
       for (const [sq, pm] of boardView!.pieces) { if (pm.type === 'king' && pm.color === side) { boardView!.showCheck(sq); break; } }
     }
-    if (gameMode === 'online' && adapter && !wasRemote) adapter.sendMove({ from, to, promotion: mv.promotion, fen: game!.fen() });
+    if (gameMode === 'online' && adapter && !wasRemote) adapter.sendMove({ from, to, promotion: mv.promotion, fen: game!.fen(), whiteMs: clock?.whiteMs, blackMs: clock?.blackMs });
     if (clock && (gameMode === 'timed' || gameMode === 'online') && !remoteMove) adapter?.sendClock(clock.whiteMs, clock.blackMs);
     updateHUD();
     SFX.move();

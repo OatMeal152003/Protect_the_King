@@ -1,4 +1,4 @@
-export interface NetMove { from: string; to: string; promotion?: string; fen: string; }
+export interface NetMove { from: string; to: string; promotion?: string; fen: string; whiteMs?: number; blackMs?: number; }
 export interface NetAdapter {
   createRoom(): Promise<string>;
   joinRoom(code: string): Promise<void>;

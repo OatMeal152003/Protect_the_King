@@ -84,22 +84,18 @@ export class SupabaseAdapter implements NetAdapter {
       .channel(`events:${code}`)
       .on('broadcast', { event: 'draw' }, () => this.drawCb?.())
       .on('broadcast', { event: 'resign' }, () => this.resignCb?.())
-      .on('broadcast', { event: 'clock' }, (p: any) => {
-        if (p?.payload) this.clockCb?.(p.payload.w, p.payload.b);
-      })
       .subscribe();
   }
 
   sendMove(m: NetMove): void {
-    // clocks are sent alongside via sendClock; store w/b on the move row
     this.supabase.from('moves').insert({
       room_code: this.code,
       from_sq: m.from,
       to_sq: m.to,
       promotion: m.promotion || null,
       fen: m.fen,
-      white_ms: 0,
-      black_ms: 0,
+      white_ms: m.whiteMs ?? 0,
+      black_ms: m.blackMs ?? 0,
     }).then(({ data, error }) => {
       if (error) { console.error('sendMove failed', error); return; }
       const row: any = Array.isArray(data) ? data[0] : data;
@@ -107,11 +103,8 @@ export class SupabaseAdapter implements NetAdapter {
     });
   }
 
-  sendClock(w: number, b: number): void {
-    // Update the latest move row's clocks (best-effort)
-    this.supabase.from('moves').update({ white_ms: w, black_ms: b }).eq('room_code', this.code).order('id', { ascending: false }).limit(1).then(() => {});
-    // Also broadcast for immediate sync
-    this.broadcast?.send({ type: 'broadcast', event: 'clock', payload: { w, b } });
+  sendClock(_w: number, _b: number): void {
+    // Clocks now travel with each move; nothing to do here.
   }
 
   onMove(cb: (m: NetMove) => void): void { this.moveCb = cb; }
