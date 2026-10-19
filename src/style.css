@@ -1,0 +1,11 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a12; color: #e8e8f0; font-family: "Press Start 2P", monospace, sans-serif; }
+#app { position: relative; width: 100%; height: 100%; }
+canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
+.overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10,10,18,0.92); z-index: 10; }
+.overlay.hidden { display: none; }
+.loading-box { text-align: center; padding: 2rem; }
+.title { font-size: 1.2rem; margin-bottom: 1.5rem; letter-spacing: 2px; }
+.bar { width: 260px; height: 14px; border: 2px solid #fff; margin: 0 auto 1rem; }
+#bar-fill { height: 100%; width: 0%; background: #ffd700; transition: width 0.15s; }
+#loading-text { font-size: 0.7rem; opacity: 0.8; }
