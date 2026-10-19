@@ -56,6 +56,7 @@ let hudInterval: ReturnType<typeof setInterval> | null = null;
 // captured tracking (placeholder)
 let moveHistory: string[] = [];
 let capturedPieces: string[] = [];
+let pendingMoves: NetMove[] = [];
 
 // ---- DOM helpers ----
 function clearOverlays() { document.querySelectorAll('.overlay').forEach((o) => o.remove()); }
@@ -102,6 +103,7 @@ function showMenu() {
   screen = 'menu';
   paused = false;
   introActive = false;
+  pendingMoves = [];
   if (ai) { ai.terminate(); ai = null; }
   if (hudInterval) { clearInterval(hudInterval); hudInterval = null; }
   document.querySelectorAll('.game-menu-btn, .game-cam-btn').forEach((e) => e.remove());
@@ -421,20 +423,22 @@ function showOnlineMenu() {
 function setupOnlineHandlers() {
   if (!adapter) return;
   adapter.onMove((m: NetMove) => {
-    if (!game || !boardView) return;
+    if (!game || !boardView) { pendingMoves.push(m); return; }
+    console.log('online onMove', m.from, m.to, 'turn=', game.turn(), 'fen=', game.fen());
     const mv = game.move(m.from, m.to, m.promotion);
     if (mv) {
       remoteMove = true;
       applyMoveToBoard(m.from, m.to, mv, !!mv.flags?.includes('c') || !!mv.flags?.includes('e'));
       remoteMove = false;
-    } else {
-      // Desync fallback: rebuild from FEN
-      console.warn('online: move illegal/out of sync, resyncing from FEN', m.from, m.to);
+    } else if (game.fen() !== m.fen) {
+      console.warn('online: move illegal/out of sync', { from: m.from, to: m.to, turn: game.turn(), fen: game.fen(), targetFen: m.fen });
       game.load(m.fen);
       boardView.loadPosition(m.fen).then(() => {
         boardView!.showLastMove(m.from, m.to);
         updateHUD();
       });
+    } else {
+      // already in sync (duplicate event) - nothing to do
     }
     if (clock && m.whiteMs != null && m.blackMs != null) {
       clock.whiteMs = m.whiteMs;
@@ -768,6 +772,23 @@ async function startGame() {
   ensureHUD();
   updateHUD();
   hudUpdateTurn();
+  // drain any moves that arrived before the game was ready
+  if (pendingMoves.length) {
+    const queued = pendingMoves.splice(0);
+    for (const m of queued) {
+      const mv = game!.move(m.from, m.to, m.promotion);
+      if (mv) {
+        remoteMove = true;
+        applyMoveToBoard(m.from, m.to, mv, !!mv.flags?.includes('c') || !!mv.flags?.includes('e'));
+        remoteMove = false;
+      } else if (game!.fen() !== m.fen) {
+        game!.load(m.fen);
+        boardView!.loadPosition(m.fen).then(() => { boardView!.showLastMove(m.from, m.to); updateHUD(); });
+      }
+      if (clock && m.whiteMs != null && m.blackMs != null) { clock.whiteMs = m.whiteMs; clock.blackMs = m.blackMs; }
+    }
+    checkEndAndAI();
+  }
   if (playerColor === 'b') ctx.resetView(true);
   else ctx.resetView(false);
 
