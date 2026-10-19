@@ -121,21 +121,23 @@ export class BoardView {
 
   makeSword(): THREE.Group {
     const g = new THREE.Group();
-    // blade
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.2, 0.04), new THREE.MeshBasicMaterial({ color: 0xff3355 }));
-    blade.position.y = 0.6;
-    g.add(blade);
-    // crossguard
-    const guard = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.08, 0.12), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
-    guard.position.y = 0.05;
-    g.add(guard);
-    // pommel
-    const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
-    pommel.position.y = -0.1;
-    g.add(pommel);
-    g.rotation.z = Math.PI / 6;
-    // bob animation via userData
-    (g as any).bob = 0;
+    const bladeMat = new THREE.MeshBasicMaterial({ color: 0xff3355 });
+    const guardMat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+    // two crossed swords forming an X
+    for (let i = 0; i < 2; i++) {
+      const sword = new THREE.Group();
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.1, 0.04), bladeMat);
+      blade.position.y = 0.55;
+      sword.add(blade);
+      const guard = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.07, 0.1), guardMat);
+      guard.position.y = 0.0;
+      sword.add(guard);
+      const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), guardMat);
+      pommel.position.y = -0.12;
+      sword.add(pommel);
+      sword.rotation.z = (i === 0 ? 1 : -1) * (Math.PI / 4);
+      g.add(sword);
+    }
     return g;
   }
 
