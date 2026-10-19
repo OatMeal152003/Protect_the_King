@@ -15,7 +15,12 @@
 html, body { width: 100%; height: 100%; overflow: hidden; background: var(--c-charcoal); color: var(--c-ivory); font-family: "Rajdhani", sans-serif; }
 #app { position: relative; width: 100%; height: 100%; background: var(--c-charcoal); }
 canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; }
-.overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 10; }
+.overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 10;
+  background: linear-gradient(90deg, rgba(18,20,22,0.72) 0%, rgba(18,20,22,0.45) 50%, rgba(18,20,22,0.72) 100%), url("/assets/kingdom.jpg") center/cover no-repeat;
+  animation: fadeIn 0.35s ease-out both; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.menu-card { animation: cardIn 0.35s ease-out both; }
+@keyframes cardIn { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
 
 /* ---- Medieval main menu ---- */
 .main-menu {
