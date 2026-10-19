@@ -70,6 +70,7 @@ function overlay(html: string): HTMLDivElement {
 function showMenu() {
   screen = 'menu';
   paused = false;
+  if (ai) { ai.terminate(); ai = null; }
   document.querySelectorAll('.game-menu-btn').forEach((e) => e.remove());
   const o = overlay(`
     <div class="main-menu">
@@ -301,6 +302,7 @@ function setupOnlineHandlers() {
     remoteMove = true;
     applyMoveToBoard(m.from, m.to, mv, false);
     remoteMove = false;
+    checkEndAndAI();
   });
   adapter.onResign(() => { endGame('Opponent resigned. You win!'); });
   adapter.onDrawOffer(() => { if (confirm('Draw offered. Accept?')) endGame('Draw agreed.'); });
@@ -465,19 +467,39 @@ function showBattleIntro() {
 function isMultiplayer(): boolean { return gameMode === 'online' || gameMode === 'local'; }
 
 function showGameMenuButton() {
-  document.querySelectorAll('.game-menu-btn').forEach((e) => e.remove());
+  document.querySelectorAll('.game-menu-btn, .game-cam-btn').forEach((e) => e.remove());
   const btn = document.createElement('button');
   btn.className = 'game-menu-btn';
   btn.textContent = 'MENU';
   btn.addEventListener('click', () => {
     SFX.click();
     if (isMultiplayer()) {
-      if (confirm('Leave the game?')) { showMenu(); }
+      const o = overlay(`
+        <div class="menu-card">
+          <div class="title">OPTIONS</div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;">
+            <button data-act="draw">OFFER DRAW</button>
+            <button data-act="resign">RESIGN</button>
+            <button data-act="leave">LEAVE GAME</button>
+            <button data-act="cancel">CANCEL</button>
+          </div>
+        </div>`);
+      o.querySelector('[data-act="draw"]')?.addEventListener('click', () => { SFX.click(); adapter?.offerDraw(); clearOverlays(); });
+      o.querySelector('[data-act="resign"]')?.addEventListener('click', () => { SFX.click(); adapter?.resign(); endGame('You resigned.'); });
+      o.querySelector('[data-act="leave"]')?.addEventListener('click', () => { SFX.click(); showMenu(); });
+      o.querySelector('[data-act="cancel"]')?.addEventListener('click', () => { SFX.click(); clearOverlays(); });
     } else {
       togglePause();
     }
   });
   document.body.appendChild(btn);
+
+  const camBtn = document.createElement('button');
+  camBtn.className = 'game-menu-btn game-cam-btn';
+  camBtn.style.left = '90px';
+  camBtn.textContent = 'RESET VIEW';
+  camBtn.addEventListener('click', () => { SFX.click(); ctx.resetView(playerColor === 'b'); });
+  document.body.appendChild(camBtn);
 }
 
 function togglePause() {
@@ -530,7 +552,7 @@ async function startGame() {
 
   ctx.scene.background = new THREE.Color(SKINS[boardSkin].backgroundColor);
 
-  if (gameMode === 'ai') ai = new AI();
+  if (gameMode === 'ai') { if (ai) ai.terminate(); ai = new AI(); }
   if (gameMode === 'timed' || gameMode === 'online') {
     clock = new Clock(timedPreset.min, timedPreset.inc);
     clock.onFlag = (color) => endGame(color === 'w' ? 'Black wins on time' : 'White wins on time');
@@ -604,8 +626,9 @@ function applyMoveToBoard(from: string, to: string, mv: any, _isCapture: boolean
   const promo = mv.promotion;
 
   const doApply = () => {
-    if (isCaptureMove && victim) {
-      capturedPieces.push(victim.type);
+    if (isCaptureMove) {
+      if (victim) capturedPieces.push(victim.type);
+      else if (mv.flags?.includes('e')) capturedPieces.push('pawn');
     }
     if (promo) {
       boardView!.removePiece(from);
@@ -625,6 +648,11 @@ function applyMoveToBoard(from: string, to: string, mv: any, _isCapture: boolean
       boardView!.movePiece(from, to);
     }
     moveHistory.push(mv.san);
+    boardView!.showLastMove(from, to);
+    if (game!.isCheck()) {
+      const side = game!.turn() === 'w' ? 'white' : 'black';
+      for (const [sq, pm] of boardView!.pieces) { if (pm.type === 'king' && pm.color === side) { boardView!.showCheck(sq); break; } }
+    }
     if (gameMode === 'online' && adapter && !remoteMove) adapter.sendMove({ from, to, promotion: mv.promotion, fen: game!.fen() });
     if (clock && (gameMode === 'timed' || gameMode === 'online') && !remoteMove) adapter?.sendClock(clock.whiteMs, clock.blackMs);
     updateHUD();

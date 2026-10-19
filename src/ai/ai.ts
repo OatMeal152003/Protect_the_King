@@ -31,10 +31,8 @@ export class AI {
   async bestMove(fen: string, difficulty: Difficulty, legalMoves: string[]): Promise<MoveResult | null> {
     await this.readyPromise;
     const preset = PRESETS[difficulty];
-    // occasional blunder for easy
     if (preset.blunder > 0 && Math.random() < preset.blunder && legalMoves.length) {
       const r = legalMoves[Math.floor(Math.random() * legalMoves.length)];
-      // parse "e2e4" or "e7e8q"
       return parseUci(r);
     }
     this.worker.postMessage(`setoption name Skill Level value ${preset.skill}`);
@@ -42,8 +40,13 @@ export class AI {
     this.worker.postMessage(`go depth ${preset.depth}`);
 
     return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        this.worker.removeEventListener('message', wrap as any);
+        resolve(null);
+      }, 15000);
       const handler = (line: string) => {
         if (line.startsWith('bestmove')) {
+          clearTimeout(timeout);
           this.worker.removeEventListener('message', wrap as any);
           const parts = line.split(/\s+/);
           const uci = parts[1];

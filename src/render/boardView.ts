@@ -16,11 +16,13 @@ export class BoardView {
   pieces = new Map<string, PieceMesh>(); // square -> piece
   markers: THREE.Object3D[] = [];
   markerGroup = new THREE.Group();
+  highlightGroup = new THREE.Group();
 
   constructor(group: THREE.Group, skin: string) {
     this.group = group;
     this.skin = skin;
     this.group.add(this.markerGroup);
+    this.group.add(this.highlightGroup);
   }
 
   setSkin(skin: string): void { this.skin = skin; }
@@ -180,6 +182,31 @@ export class BoardView {
         m.position.y = 2.6 + Math.sin(t * 2) * 0.15;
       }
     }
+  }
+
+  clearHighlights(): void {
+    while (this.highlightGroup.children.length) this.highlightGroup.remove(this.highlightGroup.children[0]);
+  }
+  showLastMove(from: string, to: string): void {
+    this.clearHighlights();
+    for (const sq of [from, to]) {
+      const file = sq.charCodeAt(0) - 97;
+      const rank = parseInt(sq[1]) - 1;
+      const c = squareCenter(file, rank);
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.25 }));
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(c.x, 0.02, c.z);
+      this.highlightGroup.add(m);
+    }
+  }
+  showCheck(square: string): void {
+    const file = square.charCodeAt(0) - 97;
+    const rank = parseInt(square[1]) - 1;
+    const c = squareCenter(file, rank);
+    const m = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.62, 24), new THREE.MeshBasicMaterial({ color: 0xff3355, transparent: true, opacity: 0.8 }));
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(c.x, 0.03, c.z);
+    this.highlightGroup.add(m);
   }
 
   clearMarkers(): void {
