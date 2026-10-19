@@ -19,9 +19,18 @@ npm run preview  # preview production build
 Unzip the asset pack into `public/assets/` so it is served at `/assets/`.
 Expected: `public/assets/models/<skin>/<color>_<piece>.glb`, `public/assets/boards/<skin>_board.glb`.
 
-## Deploy
-Static site: upload `dist/` to GitHub Pages / Netlify / itch.io.
-For GitHub Pages, set base path in vite.config.ts if deploying to a subpath.
+## Online multiplayer (Supabase)
+
+Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (in `.env` for dev, or in your host's env vars for prod) to enable real cross-device multiplayer. Without them, the app falls back to `LocalAdapter` (same-browser only).
+
+Setup:
+1. Create a Supabase project.
+2. Run `supabase/schema.sql` in the SQL Editor.
+3. Enable Realtime on `rooms` and `moves` (the schema does this via `alter publication`).
+4. Copy the project URL + anon key into `.env`.
+
+## Deploy notes
+- For GitHub Pages, set `base` in `vite.config.ts` to your repo subpath (e.g. `/protect-the-king/`) and add the env vars as repo secrets injected at build time.
 
 ## Status
 All 9 build steps implemented:
