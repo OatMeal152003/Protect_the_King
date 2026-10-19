@@ -323,13 +323,17 @@ function ensureHUD() {
   if (h) return;
   h = document.createElement('div');
   h.id = 'gamehud';
-  h.style.cssText = 'position:fixed;top:8px;right:8px;width:200px;max-height:90vh;overflow:auto;background:rgba(10,10,18,0.75);border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:10px;color:#fff;font-family:monospace;font-size:11px;z-index:5;';
+  h.style.cssText = 'position:fixed;top:12px;right:12px;width:230px;max-height:88vh;overflow:hidden;background:linear-gradient(160deg,rgba(20,16,30,0.92),rgba(10,8,18,0.92));border:1px solid rgba(255,215,0,0.35);border-radius:12px;padding:12px;color:#f0eaff;font-family:"Press Start 2P",monospace;font-size:10px;z-index:5;box-shadow:0 8px 24px rgba(0,0,0,0.5),inset 0 0 0 1px rgba(255,255,255,0.05);backdrop-filter:blur(6px);';
   h.innerHTML = `
-    <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span id="clkW">W: --</span><span id="clkB">B: --</span></div>
-    <div style="font-weight:bold;margin-bottom:4px;">Moves</div>
-    <div id="movelist" style="max-height:50vh;overflow:auto;line-height:1.6;"></div>
-    <div style="font-weight:bold;margin:6px 0 4px;">Captured</div>
-    <div id="captured" style="min-height:20px;"></div>`;
+    <div style="text-align:center;font-size:12px;letter-spacing:2px;color:#ffd700;margin-bottom:10px;text-shadow:0 0 8px rgba(255,215,0,0.4);">PROTECT THE KING</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      <div id="clkW" style="flex:1;text-align:center;padding:6px;border-radius:6px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);">W 10:00</div>
+      <div id="clkB" style="flex:1;text-align:center;padding:6px;border-radius:6px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);">B 10:00</div>
+    </div>
+    <div style="font-size:9px;letter-spacing:1px;color:#ffd700;margin-bottom:4px;">MOVES</div>
+    <div id="movelist" style="max-height:46vh;overflow:auto;line-height:1.9;padding-right:4px;"></div>
+    <div style="font-size:9px;letter-spacing:1px;color:#ffd700;margin:8px 0 4px;">CAPTURED</div>
+    <div id="captured" style="min-height:24px;font-size:14px;letter-spacing:2px;color:#ff8899;"></div>`;
   document.body.appendChild(h);
   setInterval(() => {
     if (clock && !gameOver) {
@@ -340,6 +344,7 @@ function ensureHUD() {
   }, 200);
 }
 
+const PIECE_SYMBOL: Record<string, string> = { pawn: '♟', knight: '♞', bishop: '♝', rook: '♜', queen: '♛', king: '♚' };
 function updateHUD() {
   const ml = document.getElementById('movelist');
   if (ml) {
@@ -348,13 +353,14 @@ function updateHUD() {
       const n = Math.floor(i / 2) + 1;
       const w = moveHistory[i] || '';
       const b = moveHistory[i + 1] || '';
-      html += `<div><span style="opacity:0.6;">${n}.</span> ${w} ${b}</div>`;
+      const bg = i % 4 === 0 ? 'rgba(255,255,255,0.03)' : 'transparent';
+      html += `<div style="display:flex;padding:2px 4px;border-radius:4px;background:${bg};"><span style="width:22px;opacity:0.5;">${n}.</span><span style="flex:1;color:#c8f0ff;">${w}</span><span style="flex:1;color:#ffb3c6;">${b}</span></div>`;
     }
     ml.innerHTML = html;
     ml.scrollTop = ml.scrollHeight;
   }
   const cap = document.getElementById('captured');
-  if (cap) cap.textContent = capturedPieces.join(' ');
+  if (cap) cap.textContent = capturedPieces.map((p) => PIECE_SYMBOL[p] || p).join(' ');
 }
 
 // ---- Move application ----
