@@ -1,6 +1,12 @@
 import { createClient, type SupabaseClient, type RealtimeChannel } from '@supabase/supabase-js';
 import type { NetAdapter, NetMove } from './adapter';
 
+/** Clamp + round a millisecond clock value so it satisfies an integer column. */
+function toIntMs(v: number | undefined): number {
+  if (v == null || !Number.isFinite(v)) return 0;
+  return Math.max(0, Math.round(v));
+}
+
 export class SupabaseAdapter implements NetAdapter {
   private supabase: SupabaseClient;
   private channel: RealtimeChannel | null = null;
@@ -103,8 +109,9 @@ export class SupabaseAdapter implements NetAdapter {
       to_sq: m.to,
       promotion: m.promotion || null,
       fen: m.fen,
-      white_ms: m.whiteMs ?? 0,
-      black_ms: m.blackMs ?? 0,
+      // Clock values are floats (rAF deltas); the columns are integer.
+      white_ms: toIntMs(m.whiteMs),
+      black_ms: toIntMs(m.blackMs),
     }).then(({ error }) => {
       if (error) { console.error('sendMove failed', error.message, error.details, error.hint, error.code); }
     });
