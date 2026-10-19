@@ -347,7 +347,7 @@ function showSkinSelect() {
         <div class="right-col" style="align-items:stretch;justify-content:center;">
           <div class="quick-panel" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;">
             <div class="panel-title">PREVIEW</div>
-            <canvas id="skinpreview" width="560" height="420" style="border:3px solid var(--c-gold,#C89B42);border-radius:6px;background:#1a1a2e;max-width:100%;"></canvas>
+            <canvas id="skinpreview" width="400" height="300" style="border:3px solid var(--c-gold,#C89B42);border-radius:6px;background:#1a1a2e;max-width:100%;"></canvas>
             <div id="skinlabel" style="margin-top:10px;font-family:'Jersey 10',monospace;font-size:1.1rem;color:#F2E9D5;letter-spacing:2px;">${pieceSkin.toUpperCase()} / ${boardSkin.toUpperCase()}</div>
           </div>
         </div>
