@@ -421,12 +421,21 @@ function showOnlineMenu() {
 function setupOnlineHandlers() {
   if (!adapter) return;
   adapter.onMove((m: NetMove) => {
-    if (!game) return;
+    if (!game || !boardView) return;
     const mv = game.move(m.from, m.to, m.promotion);
-    if (!mv) return;
-    remoteMove = true;
-    applyMoveToBoard(m.from, m.to, mv, false);
-    remoteMove = false;
+    if (mv) {
+      remoteMove = true;
+      applyMoveToBoard(m.from, m.to, mv, !!mv.flags?.includes('c') || !!mv.flags?.includes('e'));
+      remoteMove = false;
+    } else {
+      // Desync fallback: rebuild from FEN
+      console.warn('online: move illegal/out of sync, resyncing from FEN', m.from, m.to);
+      game.load(m.fen);
+      boardView.loadPosition(m.fen).then(() => {
+        boardView!.showLastMove(m.from, m.to);
+        updateHUD();
+      });
+    }
     if (clock && m.whiteMs != null && m.blackMs != null) {
       clock.whiteMs = m.whiteMs;
       clock.blackMs = m.blackMs;
@@ -974,6 +983,7 @@ const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 canvas.addEventListener('click', (e) => {
   if (screen !== 'game' || gameOver || paused || introActive) return;
+  if (gameMode === 'online' && game && game.turn() !== playerColor[0]) return;
   // ignore if cinematics running? simple: allow
   const rect = canvas.getBoundingClientRect();
   mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;

@@ -32,6 +32,27 @@ export class BoardView {
     this.pieces.clear();
   }
 
+  async loadPosition(fen: string): Promise<void> {
+    this.clearPieces();
+    this.clearHighlights();
+    const placement = fen.split(' ')[0];
+    const rows = placement.split('/');
+    const files = 'abcdefgh';
+    const back: Record<string, string> = { p: 'pawn', r: 'rook', n: 'knight', b: 'bishop', q: 'queen', k: 'king' };
+    for (let r = 0; r < 8; r++) {
+      const row = rows[r];
+      let i = 0;
+      for (const ch of row) {
+        if (/\d/.test(ch)) { i += parseInt(ch); continue; }
+        const color: PieceColor = ch === ch.toUpperCase() ? 'white' : 'black';
+        const type = back[ch.toLowerCase()] as PieceType;
+        const sq = `${files[i]}${8 - r}`;
+        await this.addPiece(sq, color, type);
+        i++;
+      }
+    }
+  }
+
   async loadBoard(boardPath: string): Promise<THREE.Group> {
     const b = await loadGLB(boardPath);
     this.group.add(b);
