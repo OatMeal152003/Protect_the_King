@@ -97,7 +97,7 @@ export class BoardView {
       const isCap = captures.has(sq);
       if (isCap) {
         // sword indicator floating above the victim piece's head
-        const sword = this.makeSword();
+        const sword = this.makeReaper();
         sword.position.set(c.x, 2.6, c.z);
         this.markerGroup.add(sword);
         this.markers.push(sword);
@@ -119,25 +119,43 @@ export class BoardView {
     }
   }
 
-  makeSword(): THREE.Group {
+  makeReaper(): THREE.Group {
     const g = new THREE.Group();
-    const bladeMat = new THREE.MeshBasicMaterial({ color: 0xff3355 });
-    const guardMat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
-    // two crossed swords forming an X
-    for (let i = 0; i < 2; i++) {
-      const sword = new THREE.Group();
-      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.1, 0.04), bladeMat);
-      blade.position.y = 0.55;
-      sword.add(blade);
-      const guard = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.07, 0.1), guardMat);
-      guard.position.y = 0.0;
-      sword.add(guard);
-      const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), guardMat);
-      pommel.position.y = -0.12;
-      sword.add(pommel);
-      sword.rotation.z = (i === 0 ? 1 : -1) * (Math.PI / 4);
-      g.add(sword);
+    // Reaper of death: scythe + skull
+    const staffMat = new THREE.MeshBasicMaterial({ color: 0x4a3a2a });
+    const bladeMat = new THREE.MeshBasicMaterial({ color: 0xc0c0c0 });
+    const boneMat = new THREE.MeshBasicMaterial({ color: 0xe8e0d0 });
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+
+    // staff
+    const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.6, 8), staffMat);
+    staff.position.y = 0.8;
+    g.add(staff);
+
+    // curved blade (scythe) - a few boxes forming a curve
+    for (let i = 0; i < 5; i++) {
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, 0.05), bladeMat);
+      seg.position.set(0.18 + i * 0.05, 1.5 + i * 0.06, 0);
+      seg.rotation.z = -0.4 - i * 0.15;
+      g.add(seg);
     }
+
+    // skull
+    const skull = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), boneMat);
+    skull.position.set(-0.15, 1.95, 0);
+    g.add(skull);
+    // eye sockets
+    const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), eyeMat);
+    eyeL.position.set(-0.23, 1.98, 0.16);
+    g.add(eyeL);
+    const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), eyeMat);
+    eyeR.position.set(-0.07, 1.98, 0.16);
+    g.add(eyeR);
+    // jaw
+    const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.08, 0.18), boneMat);
+    jaw.position.set(-0.15, 1.78, 0);
+    g.add(jaw);
+
     return g;
   }
 
