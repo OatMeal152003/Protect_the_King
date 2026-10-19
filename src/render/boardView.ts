@@ -14,7 +14,7 @@ export class BoardView {
   group: THREE.Group;
   skin: string;
   pieces = new Map<string, PieceMesh>(); // square -> piece
-  markers: THREE.Mesh[] = [];
+  markers: THREE.Object3D[] = [];
   markerGroup = new THREE.Group();
 
   constructor(group: THREE.Group, skin: string) {
@@ -95,19 +95,56 @@ export class BoardView {
       const rank = parseInt(sq[1]) - 1;
       const c = squareCenter(file, rank);
       const isCap = captures.has(sq);
-      const geo = new THREE.CylinderGeometry(isCap ? 0.5 : 0.4, isCap ? 0.5 : 0.4, 0.06, 24);
-      const mat = new THREE.MeshBasicMaterial({ color: isCap ? 0xff3355 : 0x44ff88, transparent: true, opacity: 0.6 });
-      const m = new THREE.Mesh(geo, mat);
-      m.position.set(c.x, 0.03, c.z);
-      this.markerGroup.add(m);
-      this.markers.push(m);
       if (isCap) {
-        // inner ring indicator
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.05, 8, 24), new THREE.MeshBasicMaterial({ color: 0xff3355 }));
-        ring.rotation.x = Math.PI / 2;
-        ring.position.set(c.x, 0.04, c.z);
-        this.markerGroup.add(ring);
-        this.markers.push(ring);
+        // sword indicator floating above the victim piece's head
+        const sword = this.makeSword();
+        sword.position.set(c.x, 2.6, c.z);
+        this.markerGroup.add(sword);
+        this.markers.push(sword);
+        // subtle red glow on the square
+        const geo = new THREE.CylinderGeometry(0.4, 0.4, 0.04, 24);
+        const mat = new THREE.MeshBasicMaterial({ color: 0xff3355, transparent: true, opacity: 0.35 });
+        const m = new THREE.Mesh(geo, mat);
+        m.position.set(c.x, 0.03, c.z);
+        this.markerGroup.add(m);
+        this.markers.push(m);
+      } else {
+        const geo = new THREE.CylinderGeometry(0.4, 0.4, 0.06, 24);
+        const mat = new THREE.MeshBasicMaterial({ color: 0x44ff88, transparent: true, opacity: 0.6 });
+        const m = new THREE.Mesh(geo, mat);
+        m.position.set(c.x, 0.03, c.z);
+        this.markerGroup.add(m);
+        this.markers.push(m);
+      }
+    }
+  }
+
+  makeSword(): THREE.Group {
+    const g = new THREE.Group();
+    // blade
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.2, 0.04), new THREE.MeshBasicMaterial({ color: 0xff3355 }));
+    blade.position.y = 0.6;
+    g.add(blade);
+    // crossguard
+    const guard = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.08, 0.12), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
+    guard.position.y = 0.05;
+    g.add(guard);
+    // pommel
+    const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
+    pommel.position.y = -0.1;
+    g.add(pommel);
+    g.rotation.z = Math.PI / 6;
+    // bob animation via userData
+    (g as any).bob = 0;
+    return g;
+  }
+
+  animateMarkers(): void {
+    const t = performance.now() * 0.004;
+    for (const m of this.markers) {
+      if (m instanceof THREE.Group) {
+        m.rotation.y = t;
+        m.position.y = 2.6 + Math.sin(t * 2) * 0.15;
       }
     }
   }

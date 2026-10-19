@@ -543,4 +543,4 @@ barFillEl.style.width = '100%';
 setTimeout(() => loading.classList.add('hidden'), 200);
 
 showMenu();
-renderLoop(ctx, () => {});
+renderLoop(ctx, () => { if (boardView) boardView.animateMarkers(); });
