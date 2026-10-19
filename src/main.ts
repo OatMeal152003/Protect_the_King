@@ -68,22 +68,110 @@ function overlay(html: string): HTMLDivElement {
 function showMenu() {
   screen = 'menu';
   const o = overlay(`
-    <div class="menu-panel">
-      <div class="title">PROTECT<br/>THE KING</div>
-      <div class="subtitle">A PIXEL CHESS BATTLE</div>
-      <button class="menu-btn" data-act="mode">PLAY</button>
-      <button class="menu-btn" data-act="skins">SKINS</button>
-      <button class="menu-btn" data-act="settings">SETTINGS</button>
-      <div class="footer">v1.0 · THREE.JS + STOCKFISH</div>
+    <div class="main-menu">
+      <div class="menu-layout">
+        <div class="left-col">
+          <div class="royal-banner">
+            <div class="title">CHESS OF<br/>THE KINGDOM</div>
+            <div class="subtitle">A ROYAL CHESS BATTLE</div>
+          </div>
+          <div class="nav-stack">
+            <button class="med-btn" data-act="mode"><span class="icon">&#9812;</span> PLAY CHESS</button>
+            <button class="med-btn" data-act="online"><span class="icon">&#9876;</span> ONLINE MULTIPLAYER</button>
+            <button class="med-btn" data-act="local"><span class="icon">&#9817;</span> LOCAL MULTIPLAYER</button>
+            <button class="med-btn disabled" title="Coming soon"><span class="icon">&#9813;</span> PUZZLES &amp; CHALLENGES</button>
+            <button class="med-btn" data-act="skins"><span class="icon">&#9815;</span> SKINS &amp; BOARDS</button>
+            <button class="med-btn" data-act="settings"><span class="icon">&#9881;</span> SETTINGS</button>
+          </div>
+        </div>
+        <div class="center-col">
+          <button class="begin-quest" data-act="begin">BEGIN YOUR QUEST</button>
+        </div>
+        <div class="right-col">
+          <div class="quick-panel">
+            <div class="panel-title">CHOOSE YOUR BATTLE</div>
+
+            <div class="mode-section">
+              <div class="mode-name">VS COMPUTER</div>
+              <div class="mode-desc">Challenge the royal strategist.</div>
+              <div class="mode-options">
+                <button class="opt-btn" data-act="ai" data-d="easy">EASY</button>
+                <button class="opt-btn" data-act="ai" data-d="medium">MEDIUM</button>
+                <button class="opt-btn" data-act="ai" data-d="hard">HARD</button>
+                <button class="opt-btn" data-act="ai" data-d="expert">EXPERT</button>
+              </div>
+            </div>
+
+            <div class="mode-section">
+              <div class="mode-name">TIMED MATCH</div>
+              <div class="mode-desc">Race against time to claim victory.</div>
+              <div class="mode-options">
+                <button class="opt-btn action" data-act="timed" data-t="1+0">BULLET</button>
+                <button class="opt-btn action" data-act="timed" data-t="3+2">BLITZ</button>
+                <button class="opt-btn action" data-act="timed" data-t="10+0">RAPID</button>
+                <button class="opt-btn action" data-act="timed" data-t="30+0">CLASSICAL</button>
+              </div>
+            </div>
+
+            <div class="mode-section">
+              <div class="mode-name">LOCAL DUEL</div>
+              <div class="mode-desc">Challenge a friend beside you.</div>
+              <div class="mode-options">
+                <button class="opt-btn action" data-act="local">START LOCAL GAME</button>
+              </div>
+            </div>
+
+            <div class="mode-section">
+              <div class="mode-name">ONLINE MATCH</div>
+              <div class="mode-desc">Face challengers across the kingdom.</div>
+              <div class="mode-options">
+                <button class="opt-btn action" data-act="online-create">FIND MATCH</button>
+                <button class="opt-btn action" data-act="online-join">CREATE ROOM</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>`);
-  o.classList.add('overlay-menu');
-  o.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
-    SFX.click();
-    const act = (b as HTMLElement).dataset.act;
-    if (act === 'mode') showModeSelect();
-    if (act === 'skins') showSkinSelect();
-    if (act === 'settings') showSettings();
-  }));
+
+  o.querySelectorAll('button').forEach((b) => {
+    const el = b as HTMLElement;
+    const act = el.dataset.act;
+    if (!act || act === 'ai' || act === 'timed') return;
+    el.addEventListener('click', () => {
+      SFX.click();
+      if (act === 'mode' || act === 'begin') showModeSelect();
+      else if (act === 'online' || act === 'online-create' || act === 'online-join') showOnlineMenu();
+      else if (act === 'local') { gameMode = 'local'; playerColor = 'w'; startGame(); }
+      else if (act === 'skins') showSkinSelect();
+      else if (act === 'settings') showSettings();
+    });
+  });
+  o.querySelectorAll('[data-act="ai"]').forEach((b) => {
+    b.addEventListener('click', () => {
+      SFX.click();
+      const d = (b as HTMLElement).dataset.d as string;
+      const diff = d === 'expert' ? 'hard' : d;
+      difficulty = diff as any;
+      gameMode = 'ai';
+      playerColor = 'w';
+      startGame();
+    });
+  });
+  o.querySelectorAll('[data-act="timed"]').forEach((b) => {
+    b.addEventListener('click', () => {
+      SFX.click();
+      const t = (b as HTMLElement).dataset.t as string;
+      // const [m, inc] = t.split('+');
+      if (t === '1+0') timedPreset = { min: 1, inc: 0 };
+      else if (t === '3+2') timedPreset = { min: 3, inc: 2 };
+      else if (t === '10+0') timedPreset = { min: 10, inc: 0 };
+      else if (t === '30+0') timedPreset = { min: 30, inc: 0 };
+      gameMode = 'timed';
+      playerColor = 'w';
+      startGame();
+    });
+  });
 }
 
 function showModeSelect() {

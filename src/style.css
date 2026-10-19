@@ -1,46 +1,192 @@
+:root {
+  --c-charcoal: #1C1B19;
+  --c-stone: #39312C;
+  --c-walnut: #65452C;
+  --c-crimson: #B52E32;
+  --c-gold: #C89B42;
+  --c-parchment: #D9C9A1;
+  --c-darktext: #33251B;
+  --c-grass: #3E7542;
+  --c-sky: #287DA5;
+  --c-ivory: #F2E9D5;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a12; color: #e8e8f0; font-family: "Rajdhani", sans-serif; }
-#app { position: relative; width: 100%; height: 100%; background: #0a0a12 url('/menu-bg.png') center/cover no-repeat; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--c-charcoal); color: var(--c-ivory); font-family: "Rajdhani", sans-serif; }
+#app { position: relative; width: 100%; height: 100%; background: var(--c-charcoal); }
 canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; }
-.overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(10,10,18,0.55), rgba(10,10,18,0.85)); z-index: 10; }
+.overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 10; }
 
-/* ---- Main menu: left-side panel over full-bleed dimmed art ---- */
-.overlay-menu { justify-content: flex-start; align-items: stretch;
-  background: linear-gradient(90deg, rgba(6,5,12,0.72) 0%, rgba(6,5,12,0.38) 40%, rgba(6,5,12,0.12) 75%, rgba(6,5,12,0.05) 100%), url('/menu-bg.png') center/cover no-repeat; }
-.menu-panel { display: flex; flex-direction: column; justify-content: center; gap: 6px;
-  width: min(380px, 86vw); padding: 48px 50px; height: 100%;
-  background: linear-gradient(180deg, rgba(14,11,24,0.42), rgba(8,6,16,0.55));
-  border-right: 1px solid rgba(255,215,0,0.35);
-  box-shadow: 8px 0 40px rgba(0,0,0,0.55); backdrop-filter: blur(2px);
-  animation: menuSlideIn 0.45s ease-out both; }
-@keyframes menuSlideIn { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
-.menu-panel .title { font-size: 2.4rem; line-height: 1.15; letter-spacing: 6px; color: #ffd700;
-  font-family: "Cinzel", serif; font-weight: 800;
-  text-shadow: 0 0 18px rgba(255,215,0,0.55), 0 2px 0 rgba(0,0,0,0.7); margin-bottom: 4px;
-  border-bottom: 1px solid rgba(255,215,0,0.35); padding-bottom: 14px; }
-.menu-panel .subtitle { font-size: 0.85rem; letter-spacing: 4px; color: rgba(240,234,255,0.6); margin-bottom: 34px;
-  font-family: "Rajdhani", sans-serif; font-weight: 500; }
-.menu-btn { display: block; width: 100%; margin: 6px 0; padding: 14px 18px;
-  font-family: "Rajdhani", sans-serif; font-size: 1.05rem; font-weight: 600; letter-spacing: 4px; text-align: left;
-  color: #f0eaff; background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,215,0,0.45); border-radius: 6px; cursor: pointer;
-  transition: all 0.18s ease; position: relative; overflow: hidden; }
-.menu-btn::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
-  background: rgba(255,215,0,0.55); transition: width 0.18s ease; }
-.menu-btn:hover, .menu-btn:focus { outline: none; color: #ffd700;
-  background: rgba(255,215,0,0.12); border-color: rgba(255,215,0,0.95);
-  box-shadow: 0 0 20px rgba(255,215,0,0.5), inset 0 0 16px rgba(255,215,0,0.1);
-  transform: translateX(5px); }
-.menu-btn:hover::before, .menu-btn:focus::before { width: 7px; background: #ffd700; }
-.menu-panel .footer { margin-top: 34px; font-size: 0.75rem; letter-spacing: 2px; color: rgba(240,234,255,0.4); font-family: "Rajdhani", sans-serif; }
+/* ---- Medieval main menu ---- */
+.main-menu {
+  position: relative; min-height: 100vh; width: 100%; height: 100%;
+  overflow: hidden;
+  background-image: url("/assets/kingdom.jpg");
+  background-size: cover; background-position: center center; background-repeat: no-repeat;
+}
+.main-menu::before {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, rgba(18,20,22,0.78) 0%, rgba(18,20,22,0.36) 38%, rgba(18,20,22,0.12) 65%, rgba(18,20,22,0.55) 100%);
+  pointer-events: none; z-index: 1;
+}
+.main-menu > * { position: relative; z-index: 2; }
 
-/* ---- Centered card menus (submenus) ---- */
-.menu-card { background: linear-gradient(160deg, rgba(28,22,40,0.92), rgba(12,10,20,0.92)); border: 1px solid rgba(255,215,0,0.4); border-radius: 16px; padding: 32px 40px; text-align: center; box-shadow: 0 12px 40px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.06); backdrop-filter: blur(8px); min-width: 280px; font-family: "Rajdhani", sans-serif; }
-.menu-card .title { font-size: 1.8rem; letter-spacing: 4px; color: #ffd700; font-family: "Cinzel", serif; font-weight: 700; text-shadow: 0 0 12px rgba(255,215,0,0.5); margin-bottom: 24px; }
-.menu-card button { display: block; width: 100%; margin: 8px 0; padding: 12px 16px; font-family: "Rajdhani", sans-serif; font-size: 1rem; font-weight: 600; letter-spacing: 2px; color: #f0eaff; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,215,0,0.3); border-radius: 8px; cursor: pointer; transition: all 0.15s; }
-.menu-card button:hover { background: rgba(255,215,0,0.15); border-color: rgba(255,215,0,0.7); color: #ffd700; transform: translateY(-1px); }
-.menu-card input, .menu-card select { padding: 8px 10px; font-family: "Rajdhani", sans-serif; font-size: 1rem; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; color: #f0eaff; }
-.menu-card label { display: block; margin: 6px 0; font-size: 0.9rem; opacity: 0.85; }
+.menu-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) 1fr minmax(300px, 360px);
+  gap: 16px;
+  width: 100%; height: 100%;
+  padding: 24px 28px;
+  align-items: stretch;
+}
 
-/* ---- Game HUD panel ---- */
+/* Left column */
+.left-col { display: flex; flex-direction: column; gap: 14px; justify-content: flex-start; padding-top: 12px; }
+.royal-banner {
+  background: linear-gradient(180deg, #C0392B, #8E1F22);
+  border: 3px solid var(--c-gold);
+  border-radius: 4px;
+  padding: 14px 18px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.5), inset 0 0 0 2px rgba(0,0,0,0.3);
+  text-align: center;
+  position: relative;
+}
+.royal-banner::before, .royal-banner::after {
+  content: ""; position: absolute; top: -6px; width: 14px; height: 14px;
+  background: var(--c-gold); border: 2px solid var(--c-charcoal); transform: rotate(45deg);
+}
+.royal-banner::before { left: -6px; }
+.royal-banner::after { right: -6px; }
+.royal-banner .title {
+  font-family: "Cinzel Decorative", "MedievalSharp", serif;
+  font-size: 1.35rem; font-weight: 800; letter-spacing: 2px;
+  color: var(--c-ivory); text-shadow: 0 2px 0 rgba(0,0,0,0.6), 0 0 8px rgba(255,215,0,0.3);
+  line-height: 1.2;
+}
+.royal-banner .subtitle {
+  font-family: "MedievalSharp", serif; font-size: 0.7rem; letter-spacing: 3px;
+  color: rgba(245,233,213,0.85); margin-top: 4px;
+}
+
+.nav-stack { display: flex; flex-direction: column; gap: 8px; }
+.med-btn {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  background: linear-gradient(180deg, rgba(101,69,44,0.85), rgba(57,49,44,0.9));
+  border: 2px solid var(--c-gold);
+  color: var(--c-ivory);
+  font-family: "MedievalSharp", serif; font-size: 0.95rem; font-weight: 600; letter-spacing: 1.5px;
+  text-align: left; cursor: pointer;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
+  transition: all 0.12s ease;
+  position: relative;
+}
+.med-btn .icon { width: 18px; text-align: center; color: var(--c-gold); }
+.med-btn:hover, .med-btn:focus {
+  outline: none;
+  background: linear-gradient(180deg, var(--c-crimson), #8E1F22);
+  border-color: #E6B95C;
+  transform: translateY(-2px);
+  box-shadow: 0 5px 0 rgba(0,0,0,0.4), 0 0 12px rgba(181,46,50,0.5);
+}
+.med-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0,0,0,0.4); }
+.med-btn.disabled { opacity: 0.5; cursor: not-allowed; }
+.med-btn.disabled:hover { transform: none; background: linear-gradient(180deg, rgba(101,69,44,0.85), rgba(57,49,44,0.9)); }
+
+/* Center column */
+.center-col { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; padding-bottom: 28px; }
+.begin-quest {
+  padding: 16px 40px;
+  background: linear-gradient(180deg, var(--c-crimson), #8E1F22);
+  border: 3px solid var(--c-gold);
+  color: var(--c-ivory);
+  font-family: "Cinzel Decorative", "MedievalSharp", serif; font-size: 1.1rem; font-weight: 800; letter-spacing: 3px;
+  cursor: pointer;
+  box-shadow: 0 5px 0 rgba(0,0,0,0.5), 0 0 18px rgba(181,46,50,0.4);
+  transition: all 0.12s ease;
+}
+.begin-quest:hover { transform: translateY(-2px); box-shadow: 0 7px 0 rgba(0,0,0,0.5), 0 0 24px rgba(181,46,50,0.6); }
+.begin-quest:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0,0,0,0.5); }
+
+/* Right column */
+.right-col { display: flex; flex-direction: column; gap: 10px; padding-top: 12px; }
+.quick-panel {
+  background: linear-gradient(180deg, rgba(57,49,44,0.78), rgba(28,27,25,0.85));
+  border: 2px solid var(--c-gold);
+  border-radius: 4px;
+  padding: 14px 16px;
+  backdrop-filter: blur(2px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(200,155,66,0.15);
+  overflow-y: auto; max-height: 100%;
+}
+.quick-panel .panel-title {
+  font-family: "Cinzel Decorative", "MedievalSharp", serif; font-size: 1.05rem; font-weight: 700;
+  color: var(--c-gold); letter-spacing: 2px; text-align: center;
+  border-bottom: 1px solid rgba(200,155,66,0.4); padding-bottom: 8px; margin-bottom: 10px;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.6);
+}
+.mode-section { margin-bottom: 12px; }
+.mode-section:last-child { margin-bottom: 0; }
+.mode-section .mode-name {
+  font-family: "MedievalSharp", serif; font-size: 0.95rem; font-weight: 700;
+  color: var(--c-crimson); letter-spacing: 1.5px; margin-bottom: 2px;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.4);
+}
+.mode-section .mode-desc {
+  font-family: "Rajdhani", sans-serif; font-size: 0.8rem; color: rgba(245,233,213,0.75);
+  margin-bottom: 6px; font-style: italic;
+}
+.mode-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.opt-btn {
+  padding: 6px 10px;
+  background: rgba(28,27,25,0.7);
+  border: 1px solid rgba(200,155,66,0.5);
+  color: var(--c-ivory); font-family: "Rajdhani", sans-serif; font-size: 0.8rem; font-weight: 600; letter-spacing: 1px;
+  cursor: pointer; transition: all 0.12s;
+}
+.opt-btn:hover { background: rgba(181,46,50,0.35); border-color: var(--c-gold); }
+.opt-btn.selected { background: var(--c-crimson); border-color: var(--c-gold); }
+.opt-btn.action { background: linear-gradient(180deg, var(--c-walnut), var(--c-stone)); }
+
+/* Centered card submenus */
+.menu-card {
+  background: linear-gradient(160deg, rgba(57,49,44,0.95), rgba(28,27,25,0.95));
+  border: 3px solid var(--c-gold); border-radius: 6px;
+  padding: 30px 36px; text-align: center;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.7), inset 0 0 0 2px rgba(0,0,0,0.3);
+  min-width: 300px; font-family: "Rajdhani", sans-serif;
+  max-height: 88vh; overflow-y: auto;
+}
+.menu-card .title {
+  font-family: "Cinzel Decorative", "MedievalSharp", serif; font-size: 1.6rem; font-weight: 700;
+  color: var(--c-gold); letter-spacing: 3px; text-shadow: 0 2px 0 rgba(0,0,0,0.6);
+  margin-bottom: 20px; border-bottom: 1px solid rgba(200,155,66,0.4); padding-bottom: 10px;
+}
+.menu-card button {
+  display: block; width: 100%; margin: 8px 0; padding: 11px 16px;
+  font-family: "MedievalSharp", serif; font-size: 0.95rem; font-weight: 600; letter-spacing: 2px;
+  color: var(--c-ivory); background: linear-gradient(180deg, var(--c-walnut), var(--c-stone));
+  border: 2px solid var(--c-gold); cursor: pointer; transition: all 0.12s;
+}
+.menu-card button:hover { background: linear-gradient(180deg, var(--c-crimson), #8E1F22); transform: translateY(-1px); }
+.menu-card input, .menu-card select {
+  padding: 8px 10px; font-family: "Rajdhani", sans-serif; font-size: 1rem;
+  background: rgba(28,27,25,0.8); border: 2px solid var(--c-gold); color: var(--c-ivory); border-radius: 4px;
+}
+.menu-card label { display: block; margin: 6px 0; font-size: 0.9rem; opacity: 0.9; color: var(--c-parchment); }
+
+/* HUD */
 #gamehud { font-family: "Rajdhani", sans-serif; }
+
+/* Responsive */
+@media (max-width: 900px) {
+  .menu-layout { grid-template-columns: 1fr; grid-template-rows: auto auto auto; padding: 16px; }
+  .left-col, .right-col { max-width: 100%; }
+  .center-col { min-height: 120px; }
+}
+@media (max-width: 600px) {
+  .main-menu { background-position: center top; }
+  .royal-banner .title { font-size: 1.1rem; }
+  .begin-quest { font-size: 0.9rem; padding: 12px 24px; }
+}
