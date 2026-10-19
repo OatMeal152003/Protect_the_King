@@ -1,0 +1,57 @@
+function showSkinSelect() {
+  screen = 'skins';
+  stopSkinPreview();
+  const o = overlay(`
+    <div class="menu-card">
+      <div class="title">SKINS</div>
+      <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;justify-content:center;align-items:flex-start;">
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div>
+            <label>Pieces</label><br/>
+            <select id="pskin">${SKIN_NAMES.map((s) => `<option value="${s}" ${s === pieceSkin ? 'selected' : ''}>${s}</option>`).join('')}</select>
+          </div>
+          <div>
+            <label>Board</label><br/>
+            <select id="bskin">${SKIN_NAMES.map((s) => `<option value="${s}" ${s === boardSkin ? 'selected' : ''}>${s}</option>`).join('')}</select>
+          </div>
+        </div>
+        <canvas id="skinpreview" width="320" height="240" style="border:2px solid var(--c-gold,#C89B42);border-radius:4px;background:#1a1a2e;"></canvas>
+      </div>
+      <div style="margin-top:14px;"><button data-act="back">BACK</button></div>
+    </div>`);
+  const ps = o.querySelector('#pskin') as HTMLSelectElement;
+  const bs = o.querySelector('#bskin') as HTMLSelectElement;
+  const previewCanvas = o.querySelector('#skinpreview') as HTMLCanvasElement;
+
+  async function refreshPreview() {
+    stopSkinPreview();
+    const renderer = new THREE.WebGLRenderer({ canvas: previewCanvas, antialias: true });
+    renderer.setSize(previewCanvas.width, previewCanvas.height, false);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(SKINS[boardSkin].backgroundColor);
+    scene.add(new THREE.AmbientLight(0xffffff, 1.1));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.9); dir.position.set(5, 10, 5); scene.add(dir);
+    const cam = new THREE.PerspectiveCamera(40, previewCanvas.width / previewCanvas.height, 0.1, 100);
+    cam.position.set(9, 7, 9); cam.lookAt(0, 0.5, 0);
+    const group = new THREE.Group();
+    const bv = new BoardView(group, pieceSkin);
+    bv.setSkin(pieceSkin);
+    await bv.loadBoard(SKINS[boardSkin].boardPath);
+    await bv.placeStart();
+    scene.add(group);
+    // rotate group slowly
+    function loop() {
+      group.rotation.y += 0.005;
+      renderer.render(scene, cam);
+      skinPreviewAnimId = requestAnimationFrame(loop);
+    }
+    loop();
+    skinPreviewRenderer = renderer;
+  }
+
+  ps.onchange = () => { pieceSkin = ps.value; localStorage.setItem('ptk_pieceSkin', pieceSkin); refreshPreview(); };
+  bs.onchange = () => { boardSkin = bs.value; localStorage.setItem('ptk_boardSkin', boardSkin); refreshPreview(); };
+  o.querySelector('[data-act="back"]')?.addEventListener('click', () => { SFX.click(); stopSkinPreview(); showMenu(); });
+  refreshPreview();
+}
+

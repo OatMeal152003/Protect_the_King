@@ -317,26 +317,45 @@ function showSkinSelect() {
   screen = 'skins';
   stopSkinPreview();
   const o = overlay(`
-    <div class="menu-card">
-      <div class="title">SKINS</div>
-      <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;justify-content:center;align-items:flex-start;">
-        <div style="display:flex;flex-direction:column;gap:8px;">
-          <div>
-            <label>Pieces</label><br/>
-            <select id="pskin">${SKIN_NAMES.map((s) => `<option value="${s}" ${s === pieceSkin ? 'selected' : ''}>${s}</option>`).join('')}</select>
+    <div class="main-menu">
+      <div class="menu-layout" style="grid-template-columns: minmax(300px, 420px) 1fr;">
+        <div class="left-col" style="justify-content:center;">
+          <div class="royal-banner">
+            <div class="title">SKINS &amp; BOARDS</div>
+            <div class="subtitle">CHOOSE YOUR ARMY</div>
           </div>
-          <div>
-            <label>Board</label><br/>
-            <select id="bskin">${SKIN_NAMES.map((s) => `<option value="${s}" ${s === boardSkin ? 'selected' : ''}>${s}</option>`).join('')}</select>
+          <div class="quick-panel" style="margin-top:12px;">
+            <div class="mode-section">
+              <div class="mode-name">PIECE SKIN</div>
+              <div class="mode-desc">Select your army's appearance.</div>
+              <div class="mode-options" style="flex-direction:column;gap:8px;">
+                ${SKIN_NAMES.map((s) => `<button class="opt-btn ${s === pieceSkin ? 'selected' : ''}" data-skin="piece" data-val="${s}" style="text-align:left;">${s.toUpperCase()}</button>`).join('')}
+              </div>
+            </div>
+            <div class="mode-section" style="margin-top:14px;">
+              <div class="mode-name">BOARD SKIN</div>
+              <div class="mode-desc">Select the battlefield.</div>
+              <div class="mode-options" style="flex-direction:column;gap:8px;">
+                ${SKIN_NAMES.map((s) => `<button class="opt-btn ${s === boardSkin ? 'selected' : ''}" data-skin="board" data-val="${s}" style="text-align:left;">${s.toUpperCase()}</button>`).join('')}
+              </div>
+            </div>
+            <div style="margin-top:14px;">
+              <button class="med-btn" data-act="back" style="justify-content:center;">BACK</button>
+            </div>
           </div>
         </div>
-        <canvas id="skinpreview" width="320" height="240" style="border:2px solid var(--c-gold,#C89B42);border-radius:4px;background:#1a1a2e;"></canvas>
+        <div class="right-col" style="align-items:stretch;justify-content:center;">
+          <div class="quick-panel" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <div class="panel-title">PREVIEW</div>
+            <canvas id="skinpreview" width="560" height="420" style="border:3px solid var(--c-gold,#C89B42);border-radius:6px;background:#1a1a2e;max-width:100%;"></canvas>
+            <div id="skinlabel" style="margin-top:10px;font-family:'Jersey 10',monospace;font-size:1.1rem;color:#F2E9D5;letter-spacing:2px;">${pieceSkin.toUpperCase()} / ${boardSkin.toUpperCase()}</div>
+          </div>
+        </div>
       </div>
-      <div style="margin-top:14px;"><button data-act="back">BACK</button></div>
     </div>`);
-  const ps = o.querySelector('#pskin') as HTMLSelectElement;
-  const bs = o.querySelector('#bskin') as HTMLSelectElement;
+
   const previewCanvas = o.querySelector('#skinpreview') as HTMLCanvasElement;
+  const label = o.querySelector('#skinlabel') as HTMLDivElement;
 
   async function refreshPreview() {
     stopSkinPreview();
@@ -354,18 +373,36 @@ function showSkinSelect() {
     await bv.loadBoard(SKINS[boardSkin].boardPath);
     await bv.placeStart();
     scene.add(group);
-    // rotate group slowly
     function loop() {
-      group.rotation.y += 0.005;
+      group.rotation.y += 0.003;
       renderer.render(scene, cam);
       skinPreviewAnimId = requestAnimationFrame(loop);
     }
     loop();
     skinPreviewRenderer = renderer;
+    if (label) label.textContent = `${pieceSkin.toUpperCase()} / ${boardSkin.toUpperCase()}`;
   }
 
-  ps.onchange = () => { pieceSkin = ps.value; localStorage.setItem('ptk_pieceSkin', pieceSkin); refreshPreview(); };
-  bs.onchange = () => { boardSkin = bs.value; localStorage.setItem('ptk_boardSkin', boardSkin); refreshPreview(); };
+  o.querySelectorAll('[data-skin="piece"]').forEach((b) => {
+    b.addEventListener('click', () => {
+      SFX.click();
+      pieceSkin = (b as HTMLElement).dataset.val as string;
+      localStorage.setItem('ptk_pieceSkin', pieceSkin);
+      o.querySelectorAll('[data-skin="piece"]').forEach((x) => x.classList.remove('selected'));
+      b.classList.add('selected');
+      refreshPreview();
+    });
+  });
+  o.querySelectorAll('[data-skin="board"]').forEach((b) => {
+    b.addEventListener('click', () => {
+      SFX.click();
+      boardSkin = (b as HTMLElement).dataset.val as string;
+      localStorage.setItem('ptk_boardSkin', boardSkin);
+      o.querySelectorAll('[data-skin="board"]').forEach((x) => x.classList.remove('selected'));
+      b.classList.add('selected');
+      refreshPreview();
+    });
+  });
   o.querySelector('[data-act="back"]')?.addEventListener('click', () => { SFX.click(); stopSkinPreview(); showMenu(); });
   refreshPreview();
 }
