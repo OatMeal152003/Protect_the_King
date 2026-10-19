@@ -48,6 +48,7 @@ let timedPreset: { min: number; inc: number } = { min: 10, inc: 0 };
 let playerColor: 'w' | 'b' = 'w';
 let selected: string | null = null;
 let gameOver = false;
+let paused = false;
 let remoteMove = false;
 // captured tracking (placeholder)
 let moveHistory: string[] = [];
@@ -67,6 +68,8 @@ function overlay(html: string): HTMLDivElement {
 // ---- Main Menu ----
 function showMenu() {
   screen = 'menu';
+  paused = false;
+  document.querySelectorAll('.game-menu-btn').forEach((e) => e.remove());
   const o = overlay(`
     <div class="main-menu">
       <div class="menu-layout">
@@ -407,6 +410,58 @@ function showSettings() {
   });
 }
 
+function showBattleIntro() {
+  const el = document.createElement('div');
+  el.className = 'battle-intro';
+  el.innerHTML = `<div class="bi-title">THE BATTLE BEGINS</div><div class="bi-sub">PROTECT YOUR KING</div>`;
+  document.body.appendChild(el);
+  setTimeout(() => { el.remove(); }, 2400);
+}
+
+function isMultiplayer(): boolean { return gameMode === 'online' || gameMode === 'local'; }
+
+function showGameMenuButton() {
+  document.querySelectorAll('.game-menu-btn').forEach((e) => e.remove());
+  const btn = document.createElement('button');
+  btn.className = 'game-menu-btn';
+  btn.textContent = 'MENU';
+  btn.addEventListener('click', () => {
+    SFX.click();
+    if (isMultiplayer()) {
+      if (confirm('Leave the game?')) { showMenu(); }
+    } else {
+      togglePause();
+    }
+  });
+  document.body.appendChild(btn);
+}
+
+function togglePause() {
+  if (gameOver) return;
+  if (paused) { resumeGame(); } else { pauseGame(); }
+}
+
+function pauseGame() {
+  paused = true;
+  if (clock) clock.stop();
+  const o = overlay(`
+    <div class="menu-card">
+      <div class="title">PAUSED</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;">
+        <button data-act="resume">RESUME</button>
+        <button data-act="menu">RETURN TO MENU</button>
+      </div>
+    </div>`);
+  o.querySelector('[data-act="resume"]')?.addEventListener('click', () => { SFX.click(); resumeGame(); clearOverlays(); });
+  o.querySelector('[data-act="menu"]')?.addEventListener('click', () => { SFX.click(); showMenu(); });
+}
+
+function resumeGame() {
+  paused = false;
+  if (clock && clock.active) clock.start(clock.active);
+  clearOverlays();
+}
+
 // ---- Game start ----
 async function startGame() {
   screen = 'game';
@@ -444,6 +499,11 @@ async function startGame() {
   updateHUD();
   if (playerColor === 'b') ctx.resetView(true);
   else ctx.resetView(false);
+
+  // Battle intro animation
+  showBattleIntro();
+  // In-game menu button
+  showGameMenuButton();
 }
 
 function ensureHUD() {
@@ -451,17 +511,17 @@ function ensureHUD() {
   if (h) return;
   h = document.createElement('div');
   h.id = 'gamehud';
-  h.style.cssText = 'position:fixed;top:12px;right:12px;width:230px;max-height:88vh;overflow:hidden;background:linear-gradient(160deg,rgba(20,16,30,0.92),rgba(10,8,18,0.92));border:1px solid rgba(255,215,0,0.35);border-radius:12px;padding:12px;color:#f0eaff;font-family:"Jersey 10",monospace;font-size:13px;z-index:5;box-shadow:0 8px 24px rgba(0,0,0,0.5),inset 0 0 0 1px rgba(255,255,255,0.05);backdrop-filter:blur(6px);';
+  h.style.cssText = 'position:fixed;top:12px;right:12px;width:250px;max-height:88vh;overflow:hidden;background:linear-gradient(180deg,rgba(57,49,44,0.95),rgba(28,27,25,0.95));border:3px solid #C89B42;border-radius:6px;padding:12px;color:#F2E9D5;font-family:"Jersey 10",monospace;font-size:14px;z-index:5;box-shadow:0 8px 24px rgba(0,0,0,0.6),inset 0 0 0 2px rgba(0,0,0,0.3);backdrop-filter:blur(4px);';
   h.innerHTML = `
-    <div style="text-align:center;font-size:12px;letter-spacing:2px;color:#ffd700;margin-bottom:10px;text-shadow:0 0 8px rgba(255,215,0,0.4);">PROTECT THE KING</div>
+    <div style="text-align:center;font-size:1.1rem;letter-spacing:2px;color:#C89B42;margin-bottom:10px;font-family:'Cinzel Decorative',serif;text-shadow:0 2px 0 rgba(0,0,0,0.6);border-bottom:1px solid rgba(200,155,66,0.4);padding-bottom:8px;">PROTECT THE KING</div>
     <div style="display:flex;gap:6px;margin-bottom:10px;">
-      <div id="clkW" style="flex:1;text-align:center;padding:6px;border-radius:6px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);">W 10:00</div>
-      <div id="clkB" style="flex:1;text-align:center;padding:6px;border-radius:6px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);">B 10:00</div>
+      <div id="clkW" style="flex:1;text-align:center;padding:6px;border-radius:4px;background:rgba(28,27,25,0.7);border:2px solid #C89B42;">W 10:00</div>
+      <div id="clkB" style="flex:1;text-align:center;padding:6px;border-radius:4px;background:rgba(28,27,25,0.7);border:2px solid #C89B42;">B 10:00</div>
     </div>
-    <div style="font-size:9px;letter-spacing:1px;color:#ffd700;margin-bottom:4px;">MOVES</div>
+    <div style="font-size:0.9rem;letter-spacing:2px;color:#C89B42;margin-bottom:4px;font-family:'Cinzel Decorative',serif;">MOVES</div>
     <div id="movelist" style="max-height:46vh;overflow:auto;line-height:1.9;padding-right:4px;"></div>
-    <div style="font-size:9px;letter-spacing:1px;color:#ffd700;margin:8px 0 4px;">CAPTURED</div>
-    <div id="captured" style="min-height:24px;font-size:14px;letter-spacing:2px;color:#ff8899;"></div>`;
+    <div style="font-size:0.9rem;letter-spacing:2px;color:#C89B42;margin:8px 0 4px;font-family:'Cinzel Decorative',serif;">CAPTURED</div>
+    <div id="captured" style="min-height:24px;font-size:16px;letter-spacing:2px;color:#ff8899;"></div>`;
   document.body.appendChild(h);
   setInterval(() => {
     if (clock && !gameOver) {
@@ -481,8 +541,8 @@ function updateHUD() {
       const n = Math.floor(i / 2) + 1;
       const w = moveHistory[i] || '';
       const b = moveHistory[i + 1] || '';
-      const bg = i % 4 === 0 ? 'rgba(255,255,255,0.03)' : 'transparent';
-      html += `<div style="display:flex;padding:2px 4px;border-radius:4px;background:${bg};"><span style="width:22px;opacity:0.5;">${n}.</span><span style="flex:1;color:#c8f0ff;">${w}</span><span style="flex:1;color:#ffb3c6;">${b}</span></div>`;
+      const bg = i % 4 === 0 ? 'rgba(200,155,66,0.08)' : 'transparent';
+      html += `<div style="display:flex;padding:3px 6px;border-radius:4px;background:${bg};border-bottom:1px solid rgba(200,155,66,0.15);"><span style="width:24px;opacity:0.6;color:#C89B42;">${n}.</span><span style="flex:1;color:#F2E9D5;">${w}</span><span style="flex:1;color:#ff8899;">${b}</span></div>`;
     }
     ml.innerHTML = html;
     ml.scrollTop = ml.scrollHeight;
@@ -608,6 +668,7 @@ function endGame(msg: string) {
   if (gameOver) return;
   gameOver = true;
   if (clock) clock.stop();
+  document.querySelectorAll('.game-menu-btn').forEach((e) => e.remove());
   SFX.mate();
   const o = overlay(`
     <div class="menu-card">

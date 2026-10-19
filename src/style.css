@@ -195,3 +195,40 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
   .royal-banner .title { font-size: 1.1rem; }
   .begin-quest { font-size: 0.9rem; padding: 12px 24px; }
 }
+
+/* ---- In-game menu/pause button ---- */
+.game-menu-btn {
+  position: fixed; top: 12px; left: 12px; z-index: 6;
+  padding: 8px 14px;
+  background: linear-gradient(180deg, var(--c-walnut), var(--c-stone));
+  border: 2px solid var(--c-gold); color: var(--c-ivory);
+  font-family: "Jersey 10", monospace; font-size: 1rem; letter-spacing: 2px;
+  cursor: pointer; transition: all 0.12s;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.4);
+}
+.game-menu-btn:hover { background: linear-gradient(180deg, var(--c-crimson), #8E1F22); transform: translateY(-1px); }
+
+/* ---- Battle intro ---- */
+.battle-intro {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center; flex-direction: column;
+  background: radial-gradient(ellipse at center, rgba(18,20,22,0.6), rgba(18,20,22,0.92));
+  animation: battleFade 2.4s ease-in-out forwards;
+  pointer-events: none;
+}
+.battle-intro .bi-title {
+  font-family: "Cinzel Decorative", serif; font-size: 2.6rem; font-weight: 900;
+  color: var(--c-gold); letter-spacing: 6px;
+  text-shadow: 0 0 24px rgba(200,155,66,0.6), 0 4px 0 rgba(0,0,0,0.7);
+  animation: battleScale 2.4s ease-in-out forwards;
+}
+.battle-intro .bi-sub {
+  font-family: "Jersey 10", monospace; font-size: 1.2rem; letter-spacing: 4px;
+  color: var(--c-ivory); margin-top: 12px; opacity: 0.85;
+}
+@keyframes battleFade {
+  0% { opacity: 0; } 15% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; }
+}
+@keyframes battleScale {
+  0% { transform: scale(0.85); } 20% { transform: scale(1.05); } 35% { transform: scale(1); } 100% { transform: scale(1); }
+}
