@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { PixelPipeline, loadSettings } from './pixel';
+import { loadSettings } from './pixel';
 
 export interface SceneContext {
   scene: THREE.Scene;
@@ -8,8 +8,8 @@ export interface SceneContext {
   renderer: THREE.WebGLRenderer;
   controls: OrbitControls;
   group: THREE.Group;
-  pixel: PixelPipeline;
   resetView: (blackSide?: boolean) => void;
+  applyPixelSize: (w: number, h: number) => void;
 }
 
 export function createScene(canvas: HTMLCanvasElement): SceneContext | null {
@@ -18,13 +18,14 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext | null {
     if (!c) return null;
   } catch { return null; }
 
+  const settings = loadSettings();
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
   renderer.setPixelRatio(1);
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(settings.width, settings.height, false);
   renderer.setClearColor(0x0a0a12);
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 200);
+  const camera = new THREE.PerspectiveCamera(35, settings.width / settings.height, 0.1, 200);
   camera.position.set(0, 14, 16);
   camera.lookAt(0, 0, 0);
 
@@ -44,25 +45,24 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext | null {
   const group = new THREE.Group();
   scene.add(group);
 
-  const pixel = new PixelPipeline(loadSettings());
-
   const resetView = (blackSide = false) => {
-    if (blackSide) {
-      camera.position.set(0, 14, -16);
-    } else {
-      camera.position.set(0, 14, 16);
-    }
+    if (blackSide) camera.position.set(0, 14, -16);
+    else camera.position.set(0, 14, 16);
     controls.target.set(0, 0, 0);
     controls.update();
   };
 
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
+  const applyPixelSize = (w: number, h: number) => {
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+  };
+
+  window.addEventListener('resize', () => {
+    // keep pixel resolution; CSS handles display size
   });
 
-  return { scene, camera, renderer, controls, group, pixel, resetView };
+  return { scene, camera, renderer, controls, group, resetView, applyPixelSize };
 }
 
 export function renderLoop(ctx: SceneContext, onFrame?: () => void): void {
@@ -70,7 +70,7 @@ export function renderLoop(ctx: SceneContext, onFrame?: () => void): void {
     requestAnimationFrame(animate);
     ctx.controls.update();
     if (onFrame) onFrame();
-    ctx.pixel.render(ctx.renderer, ctx.scene, ctx.camera);
+    ctx.renderer.render(ctx.scene, ctx.camera);
   };
   animate();
 }

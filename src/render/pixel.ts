@@ -27,7 +27,7 @@ export class PixelPipeline {
   quadScene: THREE.Scene;
   quadCamera: THREE.OrthographicCamera;
   quadMesh: THREE.Mesh;
-  material: THREE.ShaderMaterial;
+  material: THREE.MeshBasicMaterial;
 
   constructor(settings?: PixelSettings) {
     this.settings = settings ?? loadSettings();
@@ -36,14 +36,11 @@ export class PixelPipeline {
       magFilter: THREE.NearestFilter,
       format: THREE.RGBAFormat,
     });
+    this.target.texture.minFilter = THREE.NearestFilter;
+    this.target.texture.magFilter = THREE.NearestFilter;
     this.quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     this.quadScene = new THREE.Scene();
-    this.material = new THREE.ShaderMaterial({
-      uniforms: { tDiffuse: { value: this.target.texture }, uPosterize: { value: this.settings.posterize } },
-      vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-      fragmentShader: `uniform sampler2D tDiffuse; uniform bool uPosterize; varying vec2 vUv;
-        void main(){ vec4 c=texture2D(tDiffuse,vUv); if(uPosterize){ c.rgb=floor(c.rgb*4.0)/4.0; } gl_FragColor=c; }`,
-    });
+    this.material = new THREE.MeshBasicMaterial({ map: this.target.texture });
     const geo = new THREE.PlaneGeometry(2, 2);
     this.quadMesh = new THREE.Mesh(geo, this.material);
     this.quadScene.add(this.quadMesh);
@@ -57,10 +54,11 @@ export class PixelPipeline {
 
   render(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera): void {
     renderer.setRenderTarget(this.target);
+    renderer.clear();
     renderer.render(scene, camera);
     renderer.setRenderTarget(null);
-    this.material.uniforms.tDiffuse.value = this.target.texture;
-    this.material.uniforms.uPosterize.value = this.settings.posterize;
+    this.material.map = this.target.texture;
+    this.material.needsUpdate = true;
     renderer.render(this.quadScene, this.quadCamera);
   }
 }

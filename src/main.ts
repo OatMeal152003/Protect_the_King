@@ -27,7 +27,7 @@ if (!_ctx) { loading.classList.add('hidden'); errorEl.classList.remove('hidden')
 const ctx = _ctx;
 
 let settings = loadSettings();
-ctx.pixel.settings = settings;
+ctx.applyPixelSize(settings.width, settings.height);
 
 // ---- State ----
 type Screen = 'menu' | 'mode' | 'skins' | 'settings' | 'game' | 'gameover';
@@ -260,7 +260,7 @@ function showSettings() {
   o.querySelector('[data-act="back"]')?.addEventListener('click', () => {
     settings.width = parseInt((o.querySelector('#pw') as HTMLInputElement).value) || 320;
     settings.height = parseInt((o.querySelector('#ph') as HTMLInputElement).value) || 180;
-    ctx.pixel.resize(settings.width, settings.height);
+    ctx.applyPixelSize(settings.width, settings.height);
     saveSettings(settings);
     cinematicsMode = (o.querySelector('#cine') as HTMLSelectElement).value as any;
     localStorage.setItem('ptk_cine', cinematicsMode);
