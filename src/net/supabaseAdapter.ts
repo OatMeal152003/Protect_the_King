@@ -6,7 +6,7 @@ export class SupabaseAdapter implements NetAdapter {
   private channel: RealtimeChannel | null = null;
   private broadcast: RealtimeChannel | null = null;
   private code = '';
-  private lastMoveId = 0;
+  private sentMoveUids = new Set<string>();
 
   private moveCb: ((m: NetMove) => void) | null = null;
   private clockCb: ((w: number, b: number) => void) | null = null;
@@ -62,9 +62,13 @@ export class SupabaseAdapter implements NetAdapter {
       .channel(`room:${code}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'moves', filter: `room_code=eq.${code}` }, (payload: any) => {
         const row = payload.new;
-        console.log('[supabase] move insert', row?.id, row?.from_sq, row?.to_sq, 'lastMoveId=', this.lastMoveId);
-        if (!row || row.id <= this.lastMoveId) { console.log('[supabase] skip'); return; }
-        this.lastMoveId = row.id;
+        console.log('[supabase] move insert', row?.id, row?.from_sq, row?.to_sq);
+        if (!row) return;
+        // Skip our own moves (echo) — identified by move_uid
+        if (row.move_uid && this.sentMoveUids.has(row.move_uid)) {
+          console.log('[supabase] skip own echo');
+          return;
+        }
         const move: NetMove = {
           from: row.from_sq,
           to: row.to_sq,
@@ -92,6 +96,8 @@ export class SupabaseAdapter implements NetAdapter {
   }
 
   sendMove(m: NetMove): void {
+    const uid = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    this.sentMoveUids.add(uid);
     this.supabase.from('moves').insert({
       room_code: this.code,
       from_sq: m.from,
@@ -100,9 +106,9 @@ export class SupabaseAdapter implements NetAdapter {
       fen: m.fen,
       white_ms: m.whiteMs ?? 0,
       black_ms: m.blackMs ?? 0,
-    }).select('id').single().then(({ data, error }) => {
-      if (error) { console.error('sendMove failed', error); return; }
-      if (data?.id) this.lastMoveId = data.id;
+      move_uid: uid,
+    }).then(({ error }) => {
+      if (error) { console.error('sendMove failed', error); this.sentMoveUids.delete(uid); }
     });
   }
 

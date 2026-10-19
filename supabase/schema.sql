@@ -19,6 +19,7 @@ create table if not exists public.moves (
   fen text not null,
   white_ms integer not null default 0,
   black_ms integer not null default 0,
+  move_uid text,
   created_at timestamptz not null default now()
 );
 
