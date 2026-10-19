@@ -70,7 +70,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
   line-height: 1.2;
 }
 .royal-banner .subtitle {
-  font-family: "MedievalSharp", serif; font-size: 0.7rem; letter-spacing: 3px;
+  font-family: "Jersey 10", monospace; font-size: 0.7rem; letter-spacing: 3px;
   color: rgba(245,233,213,0.85); margin-top: 4px;
 }
 
@@ -81,7 +81,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
   background: linear-gradient(180deg, rgba(101,69,44,0.85), rgba(57,49,44,0.9));
   border: 2px solid var(--c-gold);
   color: var(--c-ivory);
-  font-family: "MedievalSharp", serif; font-size: 0.95rem; font-weight: 600; letter-spacing: 1.5px;
+  font-family: "Jersey 10", monospace; font-size: 0.95rem; font-weight: 600; letter-spacing: 1.5px;
   text-align: left; cursor: pointer;
   box-shadow: 0 3px 0 rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
   transition: all 0.12s ease;
@@ -134,12 +134,12 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
 .mode-section { margin-bottom: 12px; }
 .mode-section:last-child { margin-bottom: 0; }
 .mode-section .mode-name {
-  font-family: "MedievalSharp", serif; font-size: 0.95rem; font-weight: 700;
+  font-family: "Jersey 10", monospace; font-size: 0.95rem; font-weight: 700;
   color: var(--c-crimson); letter-spacing: 1.5px; margin-bottom: 2px;
   text-shadow: 0 1px 0 rgba(0,0,0,0.4);
 }
 .mode-section .mode-desc {
-  font-family: "Rajdhani", sans-serif; font-size: 0.8rem; color: rgba(245,233,213,0.75);
+  font-family: "Jersey 10", monospace; font-size: 0.8rem; color: rgba(245,233,213,0.75);
   margin-bottom: 6px; font-style: italic;
 }
 .mode-options { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -170,7 +170,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
 }
 .menu-card button {
   display: block; width: 100%; margin: 8px 0; padding: 11px 16px;
-  font-family: "MedievalSharp", serif; font-size: 0.95rem; font-weight: 600; letter-spacing: 2px;
+  font-family: "Jersey 10", monospace; font-size: 0.95rem; font-weight: 600; letter-spacing: 2px;
   color: var(--c-ivory); background: linear-gradient(180deg, var(--c-walnut), var(--c-stone));
   border: 2px solid var(--c-gold); cursor: pointer; transition: all 0.12s;
 }
