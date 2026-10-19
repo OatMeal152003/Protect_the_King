@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Protect the King</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Cinzel+Decorative:wght@700;900&family=Jersey+10&family=MedievalSharp&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="canvas"></canvas>
+      <div id="loading" class="overlay">
+        <div class="loading-box">
+          <div class="title">PROTECT THE KING</div>
+          <div class="bar"><div id="bar-fill"></div></div>
+          <div id="loading-text">Loading...</div>
+        </div>
+      </div>
+      <div id="error" class="overlay hidden">
+        <div class="loading-box">
+          <div class="title">WEBGL NOT AVAILABLE</div>
+          <p>Your browser does not support WebGL. Please use a modern browser.</p>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

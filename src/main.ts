@@ -50,13 +50,22 @@ let playerColor: 'w' | 'b' = 'w';
 let selected: string | null = null;
 let gameOver = false;
 let paused = false;
+let introActive = false;
 let remoteMove = false;
+let hudInterval: ReturnType<typeof setInterval> | null = null;
 // captured tracking (placeholder)
 let moveHistory: string[] = [];
 let capturedPieces: string[] = [];
 
 // ---- DOM helpers ----
 function clearOverlays() { document.querySelectorAll('.overlay').forEach((o) => o.remove()); }
+function showToast(msg: string, ms = 3000): void {
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:60;padding:10px 18px;background:linear-gradient(180deg,#B52E32,#8E1F22);border:2px solid #C89B42;color:#F2E9D5;font-family:"Jersey 10",monospace;font-size:1rem;letter-spacing:2px;box-shadow:0 4px 16px rgba(0,0,0,0.5);animation:fadeIn 0.2s ease-out;';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; setTimeout(() => t.remove(), 300); }, ms);
+}
 function showConfirm(msg: string, onYes: () => void): void {
   const o = overlay(`
     <div class="menu-card">
@@ -92,8 +101,11 @@ function overlay(html: string): HTMLDivElement {
 function showMenu() {
   screen = 'menu';
   paused = false;
+  introActive = false;
   if (ai) { ai.terminate(); ai = null; }
-  document.querySelectorAll('.game-menu-btn').forEach((e) => e.remove());
+  if (hudInterval) { clearInterval(hudInterval); hudInterval = null; }
+  document.querySelectorAll('.game-menu-btn, .game-cam-btn').forEach((e) => e.remove());
+  document.getElementById('gamehud')?.remove();
   const o = overlay(`
     <div class="main-menu">
       <div class="menu-layout">
@@ -326,6 +338,15 @@ function setupOnlineHandlers() {
     remoteMove = false;
     checkEndAndAI();
   });
+  adapter.onClock((w: number, b: number) => {
+    if (!clock) return;
+    clock.whiteMs = w;
+    clock.blackMs = b;
+  });
+  adapter.onOpponent((present: boolean) => {
+    // could update UI; for now log
+    if (present) console.log('Opponent joined');
+  });
   adapter.onResign(() => { endGame('Opponent resigned. You win!'); });
   adapter.onDrawOffer(() => { showConfirm('Draw offered. Accept?', () => endGame('Draw agreed.')); });
 }
@@ -479,11 +500,12 @@ function showSettings() {
 }
 
 function showBattleIntro() {
+  introActive = true;
   const el = document.createElement('div');
   el.className = 'battle-intro';
   el.innerHTML = `<div class="bi-title">THE BATTLE BEGINS</div><div class="bi-sub">PROTECT YOUR KING</div>`;
   document.body.appendChild(el);
-  setTimeout(() => { el.remove(); }, 2400);
+  setTimeout(() => { el.remove(); introActive = false; }, 2400);
 }
 
 function isMultiplayer(): boolean { return gameMode === 'online' || gameMode === 'local'; }
@@ -611,8 +633,9 @@ function ensureHUD() {
     <div style="font-size:0.9rem;letter-spacing:2px;color:#C89B42;margin:8px 0 4px;font-family:'Cinzel Decorative',serif;">CAPTURED</div>
     <div id="captured" style="min-height:24px;font-size:16px;letter-spacing:2px;color:#ff8899;"></div>`;
   document.body.appendChild(h);
-  setInterval(() => {
-    if (clock && !gameOver) {
+  if (hudInterval) clearInterval(hudInterval);
+  hudInterval = setInterval(() => {
+    if (clock && !gameOver && !paused) {
       const w = document.getElementById('clkW'); const b = document.getElementById('clkB');
       if (w) w.textContent = 'W: ' + clock.format(clock.whiteMs);
       if (b) b.textContent = 'B: ' + clock.format(clock.blackMs);
@@ -646,6 +669,7 @@ function applyMoveToBoard(from: string, to: string, mv: any, _isCapture: boolean
   const isCaptureMove = !!victim || mv.flags?.includes('c') || mv.flags?.includes('e');
   const pieceType = piece?.type || 'pawn';
   const promo = mv.promotion;
+  const wasRemote = remoteMove;
 
   const doApply = () => {
     if (isCaptureMove) {
@@ -675,7 +699,7 @@ function applyMoveToBoard(from: string, to: string, mv: any, _isCapture: boolean
       const side = game!.turn() === 'w' ? 'white' : 'black';
       for (const [sq, pm] of boardView!.pieces) { if (pm.type === 'king' && pm.color === side) { boardView!.showCheck(sq); break; } }
     }
-    if (gameMode === 'online' && adapter && !remoteMove) adapter.sendMove({ from, to, promotion: mv.promotion, fen: game!.fen() });
+    if (gameMode === 'online' && adapter && !wasRemote) adapter.sendMove({ from, to, promotion: mv.promotion, fen: game!.fen() });
     if (clock && (gameMode === 'timed' || gameMode === 'online') && !remoteMove) adapter?.sendClock(clock.whiteMs, clock.blackMs);
     updateHUD();
     SFX.move();
@@ -714,8 +738,8 @@ function checkEndAndAI() {
     else clock.switchTo(game.turn() === 'w' ? 'w' : 'b');
   }
   // AI move
-  if (gameMode === 'ai' && game.turn() !== playerColor[0] as 'w' | 'b' && !gameOver) {
-    setTimeout(() => doAIMove(), 300);
+  if (gameMode === 'ai' && game.turn() !== playerColor[0] as 'w' | 'b' && !gameOver && !paused) {
+    setTimeout(() => { if (!paused) doAIMove(); }, 300);
   }
   // (online send handled in applyMoveToBoard)
   hudUpdateTurn();
@@ -731,7 +755,7 @@ async function doAIMove() {
   const fen = game.fen();
   const legal = game.moves().map((m: any) => m.from + m.to + (m.promotion || ''));
   const res = await ai.bestMove(fen, difficulty, legal);
-  if (!res) return;
+  if (!res) { showToast('AI failed to move. Check console.'); return; }
   const mv = game.move(res.from, res.to, res.promotion);
   if (!mv) return;
   applyMoveToBoard(res.from, res.to, mv, true);
@@ -762,7 +786,8 @@ function endGame(msg: string) {
   if (gameOver) return;
   gameOver = true;
   if (clock) clock.stop();
-  document.querySelectorAll('.game-menu-btn').forEach((e) => e.remove());
+  if (hudInterval) { clearInterval(hudInterval); hudInterval = null; }
+  document.querySelectorAll('.game-menu-btn, .game-cam-btn').forEach((e) => e.remove());
   SFX.mate();
   const o = overlay(`
     <div class="menu-card">
@@ -778,7 +803,7 @@ function endGame(msg: string) {
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 canvas.addEventListener('click', (e) => {
-  if (screen !== 'game' || gameOver || paused) return;
+  if (screen !== 'game' || gameOver || paused || introActive) return;
   // ignore if cinematics running? simple: allow
   const rect = canvas.getBoundingClientRect();
   mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
