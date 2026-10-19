@@ -73,6 +73,7 @@ export class SupabaseAdapter implements NetAdapter {
         // Skip our own echoes: match by from/to/fen
         if (this.lastSentMove && row.from_sq === this.lastSentMove.from && row.to_sq === this.lastSentMove.to && row.fen === this.lastSentMove.fen) {
           console.log('[supabase] skip own echo');
+          this.lastSentMove = null;
           return;
         }
         const move: NetMove = {
