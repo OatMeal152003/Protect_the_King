@@ -72,7 +72,7 @@ function showMenu() {
       <div class="menu-layout">
         <div class="left-col">
           <div class="royal-banner">
-            <div class="title">CHESS OF<br/>THE KINGDOM</div>
+            <div class="title">PROTECT<br/>THE KING</div>
             <div class="subtitle">A ROYAL CHESS BATTLE</div>
           </div>
           <div class="nav-stack">
