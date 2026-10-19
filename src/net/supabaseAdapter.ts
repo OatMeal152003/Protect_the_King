@@ -106,7 +106,7 @@ export class SupabaseAdapter implements NetAdapter {
       white_ms: m.whiteMs ?? 0,
       black_ms: m.blackMs ?? 0,
     }).then(({ error }) => {
-      if (error) { console.error('sendMove failed', error); }
+      if (error) { console.error('sendMove failed', error.message, error.details, error.hint, error.code); }
     });
   }
 
