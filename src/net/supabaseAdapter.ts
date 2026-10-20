@@ -1,10 +1,16 @@
 import { createClient, type SupabaseClient, type RealtimeChannel } from '@supabase/supabase-js';
-import type { NetAdapter, NetMove } from './adapter';
+import type { NetAdapter, NetMove, RoomSettings } from './adapter';
 
 /** Clamp + round a millisecond clock value so it satisfies an integer column. */
 function toIntMs(v: number | undefined): number {
   if (v == null || !Number.isFinite(v)) return 0;
   return Math.max(0, Math.round(v));
+}
+
+function clampTime(v: unknown): number {
+  const n = typeof v === 'number' ? v : Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(24 * 60 * 60 * 1000, Math.max(0, Math.round(n)));
 }
 
 export class SupabaseAdapter implements NetAdapter {
@@ -19,13 +25,20 @@ export class SupabaseAdapter implements NetAdapter {
   private subscribedCode = '';
   /** Send a join handshake once the broadcast channel is ready. */
   private announceJoin = false;
+  /** Host-chosen setup, broadcast to the joiner so both clients start alike. */
+  private isHost = false;
+  private roomSettings: RoomSettings | null = null;
+  private settingsResolve: ((s: RoomSettings | null) => void) | null = null;
+  private broadcastReady = false;
+  private roomReady = false;
+  /** Resolves once both Realtime channels are subscribed. */
+  private readyResolve: (() => void) | null = null;
   /** Moves that arrived before main.ts registered a handler. */
   private queued: NetMove[] = [];
   /** Signatures of moves this client already sent (guards double inserts). */
   private sentSignatures = new Set<string>();
 
   private moveCb: ((m: NetMove) => void) | null = null;
-  private clockCb: ((w: number, b: number) => void) | null = null;
   private oppCb: ((p: boolean) => void) | null = null;
   private drawCb: (() => void) | null = null;
   private resignCb: (() => void) | null = null;
@@ -38,21 +51,35 @@ export class SupabaseAdapter implements NetAdapter {
     return Math.random().toString(36).slice(2, 8).toUpperCase();
   }
 
-  async createRoom(): Promise<string> {
+  async createRoom(settings: RoomSettings): Promise<string> {
+    this.isHost = true;
+    this.roomSettings = {
+      hostColor: settings.hostColor === 'b' ? 'b' : 'w',
+      initialMs: clampTime(settings.initialMs),
+      incrementMs: Math.min(60 * 60 * 1000, clampTime(settings.incrementMs)),
+    };
+    this.settingsResolve = null;
     for (let attempt = 0; attempt < 5; attempt++) {
       const code = this.genCode();
       const { error } = await this.supabase.from('rooms').insert({ code, white_present: true, black_present: false });
       if (!error) {
         this.code = code;
-        this.subscribe(code);
+        await this.subscribe(code);
         return code;
       }
     }
     throw new Error('Failed to create room');
   }
 
-  async joinRoom(code: string): Promise<void> {
+  async joinRoom(code: string): Promise<RoomSettings> {
     this.code = code.toUpperCase();
+    this.isHost = false;
+    this.roomSettings = null;
+    this.settingsResolve = null;
+    this.announceJoin = false;
+    // Subscribe before claiming the seat: the host may answer the join
+    // handshake the instant the room row updates.
+    await this.subscribe(this.code);
     const { data, error } = await this.supabase
       .from('rooms')
       .update({ black_present: true })
@@ -60,9 +87,52 @@ export class SupabaseAdapter implements NetAdapter {
       .eq('black_present', false)
       .select('code')
       .single();
-    if (error || !data) throw new Error('Room not found or already full');
+    if (error || !data) {
+      this.disconnect();
+      throw new Error('Room not found or already full');
+    }
     this.announceJoin = true;
-    this.subscribe(this.code);
+    this.sendJoin();
+    const info = await this.waitForSettings();
+    if (!info) {
+      // Give the seat back so the room is joinable again.
+      await this.supabase.from('rooms').update({ black_present: false }).eq('code', this.code);
+      this.disconnect();
+      throw new Error('The host did not answer. Try again.');
+    }
+    return info;
+  }
+
+  private sendJoin(): void {
+    if (!this.announceJoin || !this.broadcastReady) return;
+    this.announceJoin = false;
+    void this.broadcast?.send({ type: 'broadcast', event: 'join', payload: {} });
+  }
+
+  /** Repeated so a joiner that subscribed a moment late still catches setup. */
+  private sendSettings(): void {
+    if (!this.isHost || !this.roomSettings || !this.broadcast) return;
+    const channel = this.broadcast;
+    const payload = this.roomSettings;
+    const fire = () => {
+      void channel.send({ type: 'broadcast', event: 'roomsync', payload });
+    };
+    fire();
+    setTimeout(fire, 300);
+    setTimeout(fire, 1000);
+  }
+
+  private waitForSettings(): Promise<RoomSettings | null> {
+    if (this.roomSettings) return Promise.resolve(this.roomSettings);
+    return new Promise((resolve) => {
+      this.settingsResolve = resolve;
+      setTimeout(() => {
+        if (this.settingsResolve === resolve) {
+          this.settingsResolve = null;
+          resolve(null);
+        }
+      }, 6000);
+    });
   }
 
   async listOpenRooms(): Promise<{ code: string; created_at: string }[]> {
@@ -70,6 +140,7 @@ export class SupabaseAdapter implements NetAdapter {
     const { data, error } = await this.supabase
       .from('rooms')
       .select('code, created_at')
+      .eq('white_present', true)
       .eq('black_present', false)
       .gte('created_at', cutoff)
       .order('created_at', { ascending: false })
@@ -78,9 +149,19 @@ export class SupabaseAdapter implements NetAdapter {
     return (data || []).map((r: any) => ({ code: r.code, created_at: r.created_at }));
   }
 
-  private subscribe(code: string): void {
+  private subscribe(code: string): Promise<void> {
     if (this.channel) this.channel.unsubscribe();
     if (this.broadcast) this.broadcast.unsubscribe();
+    this.broadcastReady = false;
+    this.roomReady = false;
+    const ready = new Promise<void>((resolve, reject) => {
+      this.readyResolve = resolve;
+      setTimeout(() => {
+        if (!this.roomReady || !this.broadcastReady) {
+          reject(new Error('Could not connect to the room. Try again.'));
+        }
+      }, 10000);
+    });
     // Reset the row cursor only for a different room; on a reconnect we want
     // to keep it so resync fetches only the moves we actually missed.
     if (this.subscribedCode !== code) {
@@ -113,27 +194,60 @@ export class SupabaseAdapter implements NetAdapter {
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${code}` }, (payload: any) => {
         const row = payload.new;
-        if (row?.black_present) this.oppCb?.(true);
+        if (row?.white_present && row?.black_present) {
+          this.oppCb?.(true);
+          this.sendSettings();
+        }
       })
       .subscribe((status: string) => {
         // Realtime does not replay events missed during a disconnect;
         // pull anything we have not seen yet so the game can never deadlock.
-        if (status === 'SUBSCRIBED') void this.resync();
+        if (status === 'SUBSCRIBED') {
+          this.roomReady = true;
+          void this.resync();
+          this.checkReady();
+        }
       });
-    // Broadcast channel for draw/resign and the join handshake
+    // Broadcast channel for draw/resign, the join handshake, and room setup.
     this.broadcast = this.supabase
       .channel(`events:${code}`)
       .on('broadcast', { event: 'draw' }, () => this.drawCb?.())
       .on('broadcast', { event: 'resign' }, () => this.resignCb?.())
-      .on('broadcast', { event: 'join' }, () => this.oppCb?.(true))
-      .subscribe((status: string) => {
-        // Tell the host we arrived. Some Realtime setups delay the rooms
-        // UPDATE event, so the handshake carries the start signal too.
-        if (status === 'SUBSCRIBED' && this.announceJoin) {
-          this.announceJoin = false;
-          void this.broadcast?.send({ type: 'broadcast', event: 'join', payload: {} });
+      .on('broadcast', { event: 'join' }, () => {
+        // Some Realtime setups delay the rooms UPDATE event, so the handshake
+        // carries the start signal and the room setup too.
+        this.oppCb?.(true);
+        this.sendSettings();
+      })
+      .on('broadcast', { event: 'roomsync' }, (msg: any) => {
+        const p = msg?.payload;
+        if (!p || (p.hostColor !== 'w' && p.hostColor !== 'b')) return;
+        const settings: RoomSettings = {
+          hostColor: p.hostColor,
+          initialMs: clampTime(p.initialMs),
+          incrementMs: Math.min(60 * 60 * 1000, clampTime(p.incrementMs)),
+        };
+        this.roomSettings = settings;
+        if (this.settingsResolve) {
+          const resolve = this.settingsResolve;
+          this.settingsResolve = null;
+          resolve(settings);
         }
+      })
+      .subscribe((status: string) => {
+        this.broadcastReady = status === 'SUBSCRIBED';
+        if (this.broadcastReady) this.sendJoin();
+        this.checkReady();
       });
+    return ready;
+  }
+
+  private checkReady(): void {
+    if (this.roomReady && this.broadcastReady && this.readyResolve) {
+      const resolve = this.readyResolve;
+      this.readyResolve = null;
+      resolve();
+    }
   }
 
   private isOwnEcho(m: NetMove): boolean {
@@ -146,7 +260,8 @@ export class SupabaseAdapter implements NetAdapter {
   private emit(m: NetMove): void {
     if (!this.moveCb) { this.queued.push(m); return; }
     this.moveCb(m);
-    this.clockCb?.(m.whiteMs ?? 0, m.blackMs ?? 0);
+    // Clocks travel inside the move payload and are adopted there, before the
+    // receiver applies the increment; a separate callback would undo it.
   }
 
   /** Apply any moves committed while the channel was down (or before handlers registered). */
@@ -206,13 +321,29 @@ export class SupabaseAdapter implements NetAdapter {
       for (const m of backlog) cb(m);
     }
   }
-  onClock(cb: (w: number, b: number) => void): void { this.clockCb = cb; }
+  onClock(_cb: (w: number, b: number) => void): void {
+    // Clocks travel with each move row; no separate stream is needed.
+  }
   onOpponent(cb: (p: boolean) => void): void { this.oppCb = cb; }
   offerDraw(): void { this.broadcast?.send({ type: 'broadcast', event: 'draw', payload: {} }); }
   resign(): void { this.broadcast?.send({ type: 'broadcast', event: 'resign', payload: {} }); }
   onDrawOffer(cb: () => void): void { this.drawCb = cb; }
   onResign(cb: () => void): void { this.resignCb = cb; }
+  async closeRoom(): Promise<void> {
+    if (!this.isHost || !this.code) return;
+    // Host left + guest seat filled: drops out of listOpenRooms and, crucially,
+    // its own UPDATE cannot satisfy the white_present && black_present start check.
+    await this.supabase.from('rooms').update({ white_present: false, black_present: true }).eq('code', this.code);
+  }
+
   disconnect(): void {
+    if (this.settingsResolve) {
+      const resolve = this.settingsResolve;
+      this.settingsResolve = null;
+      resolve(null);
+    }
+    this.broadcastReady = false;
+    this.announceJoin = false;
     if (this.channel) { this.channel.unsubscribe(); this.channel = null; }
     if (this.broadcast) { this.broadcast.unsubscribe(); this.broadcast = null; }
   }

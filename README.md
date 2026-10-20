@@ -23,6 +23,8 @@ Expected: `public/assets/models/<skin>/<color>_<piece>.glb`, `public/assets/boar
 
 Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (in `.env` for dev, or in your host's env vars for prod) to enable real cross-device multiplayer. Without them, the app falls back to `LocalAdapter` (same-browser only).
 
+The host picks the time control (untimed, bullet, blitz, rapid, classical) and side when creating a room. The joiner takes the opposite side and receives the same clock over the join handshake, so both boards and clocks start in sync. Untimed rooms hide the clock row.
+
 Setup:
 1. Create a Supabase project.
 2. Run `supabase/schema.sql` in the SQL Editor.
@@ -38,13 +40,13 @@ All 9 build steps implemented:
 2. Pixel render pipeline (320x180, nearest-neighbor) + camera controls
 3. Move input (chess.js), legal-move highlights, promotion, game-end detection
 4. Stockfish AI (easy/medium/hard via UCI Skill Level + depth + blunders)
-5. Timer modes (Blitz 3+2, Rapid 10+0, custom) + game-over screens
+5. Timer modes (untimed, bullet, blitz, rapid, classical) + game-over screens
 6. Capture cinematics (lunge/squash, hit flash, voxel burst, camera) + skip/short
-7. Skin/board selection menus (live preview omitted; dropdowns persist)
-8. Online multiplayer adapter (room codes via BroadcastChannel; Supabase swap-in ready)
+7. Skin/board selection menus with large draggable 3D preview; choices persist
+8. Online multiplayer (Supabase Realtime rooms, host-chosen time/side, cross-device clock and move sync; BroadcastChannel fallback)
 9. Sound (procedural Web Audio), mobile touch, GitHub Pages/Netlify deploy configs
 
 ## Notes
 - Assets must be placed in `public/assets/` (see Assets section).
 - Stockfish wasm served from `public/stockfish/`.
-- Multiplayer defaults to local BroadcastChannel adapter; set VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY and implement SupabaseAdapter for production.
+- Without Supabase keys the app uses the local BroadcastChannel adapter; set VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY for cross-device play.

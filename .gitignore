@@ -27,3 +27,5 @@ dist-ssr
 # Local test artifacts
 /*.png
 .playwright-mcp/
+
+supabase/.temp/

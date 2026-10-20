@@ -12,7 +12,7 @@ import { playCapture } from './render/cinematics';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { loadSettings, saveSettings } from './render/pixel';
 import { createAdapter } from './net';
-import type { NetAdapter, NetMove } from './net';
+import type { NetAdapter, NetMove, RoomSettings } from './net';
 // startPosition imported via boardView
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
@@ -133,11 +133,19 @@ let menuLevel: MenuLevel = 'medium';
 let menuTime: TimeKey = 'rapid';
 let menuSide: SideChoice = 'white';
 let localTime: TimeKey = 'none';
+let localSide: SideChoice = 'white';
+let onlineTime: TimeKey = 'rapid';
+let onlineSide: SideChoice = 'white';
+/** Clock setup resolved from the online room (host-chosen for both players). */
+let onlineInitialMs = 600000;
+let onlineIncMs = 0;
 let menuRoomCode = '';
 let menuRooms: { code: string; created_at: string }[] = [];
 let menuRoomsStatus: 'idle' | 'loading' | 'ready' | 'error' = 'idle';
 let menuRoomsError = '';
 let menuRoot: HTMLElement | null = null;
+/** Prevents a double click from opening two rooms / joining twice. */
+let roomSetupBusy = false;
 
 const MENU_ITEMS: { id: MenuTab | 'puzzles'; label: string; icon: string; disabled?: boolean }[] = [
   { id: 'play', label: 'Play chess', icon: 'crown' },
@@ -166,6 +174,15 @@ function timePresetOf(t: TimeKey): { min: number; inc: number } {
 function timeLabel(t: TimeKey): string {
   return t === 'none' ? 'Untimed' : `${TIME_PRESETS[t].label} ${TIME_PRESETS[t].note}`;
 }
+/** Label room settings that arrived over the wire (initial/increment in ms). */
+function roomTimeLabel(initialMs: number, incMs: number): string {
+  if (!initialMs) return 'Untimed';
+  const min = initialMs / 60000;
+  const inc = incMs / 1000;
+  const key = (Object.keys(TIME_PRESETS) as Exclude<TimeKey, 'none'>[])
+    .find((k) => TIME_PRESETS[k].min === min && TIME_PRESETS[k].inc === inc);
+  return key ? `${TIME_PRESETS[key].label} ${TIME_PRESETS[key].note}` : `${min} min${inc ? ` + ${inc}` : ''}`;
+}
 function hasSupabase(): boolean {
   return !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
 }
@@ -181,7 +198,7 @@ function navHtml(): string {
 function chipButton(set: string, val: string, label: string, pressed: boolean, sub?: string): string {
   return `<button class="chip" type="button" data-set="${set}" data-val="${val}" aria-pressed="${pressed}">${label}${sub ? `<small>${sub}</small>` : ''}</button>`;
 }
-function timeChips(set: 'time' | 'localTime', current: TimeKey): string {
+function timeChips(set: 'time' | 'localTime' | 'onlineTime', current: TimeKey): string {
   return TIME_ORDER.map((t) => chipButton(
     set, t,
     t === 'none' ? 'Untimed' : TIME_PRESETS[t].label,
@@ -219,17 +236,28 @@ function menuPanelHtml(): string {
   if (menuTab === 'online') {
     return `<h2>Online match</h2>
       <div class="group">
+        <h3>Time control</h3>
+        <p>Set the clock for your room.</p>
+        <div class="chips">${timeChips('onlineTime', onlineTime)}</div>
+      </div>
+      <div class="group">
+        <h3>Play as</h3>
+        <p>Choose your side when you host.</p>
+        <div class="chips">${SIDE_ORDER.map((s) => chipButton('onlineSide', s, cap(s), onlineSide === s)).join('')}</div>
+        <div class="hint">Joining someone else's room? You take the other side.</div>
+      </div>
+      <div class="group">
         <h3>Quick match</h3>
         <p>Face challengers across the kingdom.</p>
         <div class="chips">
           <button class="chip start" type="button" data-act="find">Find match</button>
           <button class="chip" type="button" data-act="create">Create room</button>
         </div>
-        <div class="hint">10 minutes · no increment · both players must be connected</div>
+        <div class="hint">Your room: ${timeLabel(onlineTime)} · ${onlineSide === 'random' ? 'Random side' : cap(onlineSide)} · both players must be connected</div>
       </div>
       <div class="group">
         <h3>Join a room</h3>
-        <p>Enter the code a friend shared.</p>
+        <p>Enter the code a friend shared. The host's settings apply.</p>
         <div class="field">
           <input id="menu-room-code" maxlength="6" value="${escHtml(menuRoomCode)}" placeholder="ABC123" aria-label="Room code" autocomplete="off" spellcheck="false">
           <button class="chip" type="button" data-act="join">Join</button>
@@ -237,7 +265,7 @@ function menuPanelHtml(): string {
       </div>
       <div class="group">
         <h3>Open rooms</h3>
-        <p>Rooms waiting for an opponent.</p>
+        <p>Rooms waiting for an opponent. The host's settings apply.</p>
         <div id="menu-room-list">${roomListHtml()}</div>
         ${hasSupabase() ? '<div class="chips"><button class="chip" type="button" data-act="refresh">Refresh</button></div>' : ''}
       </div>`;
@@ -254,6 +282,12 @@ function menuPanelHtml(): string {
         <h3>Time control</h3>
         <p>Both armies share this clock.</p>
         <div class="chips">${timeChips('localTime', localTime)}</div>
+      </div>
+      <div class="group">
+        <h3>Play as</h3>
+        <p>Choose the side facing you.</p>
+        <div class="chips">${SIDE_ORDER.map((s) => chipButton('localSide', s, cap(s), localSide === s)).join('')}</div>
+        <div class="hint">Both players share this device; this sets the board view.</div>
       </div>`;
   }
   if (menuTab === 'skins') {
@@ -301,8 +335,8 @@ function menuPanelHtml(): string {
 }
 function menuSummary(): string {
   if (menuTab === 'play') return `Vs computer · ${MENU_LEVELS[menuLevel].label} · ${timeLabel(menuTime)} · ${cap(menuSide)}`;
-  if (menuTab === 'online') return 'Online · 10 min · no increment';
-  if (menuTab === 'local') return `Local duel · ${timeLabel(localTime)}`;
+  if (menuTab === 'online') return `Online · ${timeLabel(onlineTime)} · ${cap(onlineSide)}`;
+  if (menuTab === 'local') return `Local duel · ${timeLabel(localTime)} · ${cap(localSide)} view`;
   if (menuTab === 'skins') return `${cap(pieceSkin)} pieces · ${cap(boardSkin)} board`;
   return `${ctx.graphicsMode() === 'pixel' ? 'Pixelated' : 'Smooth'} · Cinematics ${cinematicsMode} · Sound ${volumeOn ? 'on' : 'off'}`;
 }
@@ -361,6 +395,9 @@ function applyMenuSetting(key: string, val: string): void {
     case 'time': menuTime = val as TimeKey; break;
     case 'side': menuSide = val as SideChoice; break;
     case 'localTime': localTime = val as TimeKey; break;
+    case 'localSide': localSide = val as SideChoice; break;
+    case 'onlineTime': onlineTime = val as TimeKey; break;
+    case 'onlineSide': onlineSide = val as SideChoice; break;
     case 'skin':
       pieceSkin = val;
       localStorage.setItem('ptk_pieceSkin', pieceSkin);
@@ -486,45 +523,68 @@ function joinFromCode(): void {
   void joinRoomAndStart(code);
 }
 async function joinRoomAndStart(code: string): Promise<void> {
-  if (!code) return;
+  if (!code || roomSetupBusy) return;
+  roomSetupBusy = true;
   SFX.click();
   showToast(`Joining room ${code}…`);
   adapter = createAdapter();
+  let info: RoomSettings;
   try {
-    await adapter.joinRoom(code.toUpperCase());
+    info = await adapter.joinRoom(code.toUpperCase());
   } catch (e) {
+    roomSetupBusy = false;
+    adapter.disconnect();
     showToast('Could not join room: ' + ((e as Error).message || 'unknown error'), 5000);
     return;
   }
+  roomSetupBusy = false;
+  const guestColor: 'w' | 'b' = info.hostColor === 'w' ? 'b' : 'w';
+  playerColor = guestColor;
+  onlineInitialMs = info.initialMs;
+  onlineIncMs = info.incrementMs;
   menuRoomCode = '';
   gameMode = 'online';
-  clockEnabled = true;
-  playerColor = 'b';
+  clockEnabled = onlineInitialMs > 0;
   pendingMoves = [];
   setupOnlineHandlers();
+  showToast(`Joined ${code.toUpperCase()} · ${roomTimeLabel(info.initialMs, info.incrementMs)} · You are ${guestColor === 'w' ? 'White' : 'Black'}`, 3000);
   startGame();
 }
 async function createRoomAndStart(): Promise<void> {
+  if (roomSetupBusy) return;
+  roomSetupBusy = true;
   SFX.click();
+  showToast('Opening room…');
+  const side: 'w' | 'b' = onlineSide === 'black' ? 'b' : onlineSide === 'white' ? 'w' : (Math.random() < 0.5 ? 'w' : 'b');
+  const preset = timePresetOf(onlineTime);
+  const initialMs = onlineTime === 'none' ? 0 : Math.round(preset.min * 60000);
+  const incrementMs = Math.round(preset.inc * 1000);
+  playerColor = side;
+  onlineInitialMs = initialMs;
+  onlineIncMs = incrementMs;
   adapter = createAdapter();
   pendingMoves = [];
   let code = '';
   try {
-    code = await adapter.createRoom();
+    code = await adapter.createRoom({ hostColor: side, initialMs, incrementMs });
   } catch (e) {
+    roomSetupBusy = false;
+    // Do not leave a room whose host never managed to subscribe.
+    void adapter.closeRoom().catch(() => {});
+    adapter.disconnect();
     showToast('Could not create room: ' + ((e as Error).message || 'unknown error'), 5000);
     return;
   }
+  roomSetupBusy = false;
   const wait = overlay(`
     <div class="menu-card">
       <div class="title">WAITING</div>
       <div class="wait-code">ROOM CODE <strong>${escHtml(code)}</strong></div>
-      <div class="wait-note">Share this code. The game starts when your opponent joins.</div>
+      <div class="wait-note">${timeLabel(onlineTime)} · You play ${side === 'w' ? 'White' : 'Black'}.<br>Share this code. The game starts when your opponent joins.</div>
       <button data-act="cancel">CANCEL</button>
     </div>`);
   gameMode = 'online';
-  clockEnabled = true;
-  playerColor = 'w';
+  clockEnabled = initialMs > 0;
   setupOnlineHandlers();
   let began = false;
   adapter.onOpponent((present) => {
@@ -535,12 +595,23 @@ async function createRoomAndStart(): Promise<void> {
   });
   wait.querySelector('[data-act="cancel"]')?.addEventListener('click', () => {
     SFX.click();
-    adapter?.disconnect();
-    adapter = null;
-    clearOverlays();
-    menuTab = 'online';
-    showMenu();
-    void loadMenuRooms();
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      adapter = null;
+      clearOverlays();
+      menuTab = 'online';
+      showMenu();
+      void loadMenuRooms();
+    };
+    const ad = adapter;
+    if (ad) {
+      // Close first so the refreshed lobby does not show this empty room.
+      void ad.closeRoom().catch(() => {}).finally(() => { ad.disconnect(); finish(); });
+    } else {
+      finish();
+    }
   });
 }
 function beginFromMenu(): void {
@@ -559,7 +630,7 @@ function startLocalGame(): void {
   gameMode = localTime === 'none' ? 'classic' : 'timed';
   clockEnabled = localTime !== 'none';
   timedPreset = timePresetOf(localTime);
-  playerColor = 'w';
+  playerColor = localSide === 'black' ? 'b' : localSide === 'white' ? 'w' : (Math.random() < 0.5 ? 'w' : 'b');
   startGame();
 }
 function resetMenuSettings(): void {
@@ -842,10 +913,11 @@ async function startGame() {
 
   if (gameMode === 'ai') { if (ai) ai.terminate(); ai = new AI(); }
   if (clock) { clock.stop(); clock = null; }
-  if (gameMode === 'online') clockEnabled = true;
-  if (gameMode === 'online' || clockEnabled) {
-    // Online uses a fixed preset so both clients create the same clock.
-    const preset = gameMode === 'online' ? { min: 10, inc: 0 } : timedPreset;
+  if (clockEnabled) {
+    // Online uses the host-chosen room clock; other modes use the menu preset.
+    const preset = gameMode === 'online'
+      ? { min: onlineInitialMs / 60000, inc: onlineIncMs / 1000 }
+      : timedPreset;
     clock = new Clock(preset.min, preset.inc);
     clock.onFlag = (color) => endGame(color === 'w' ? 'Black wins on time' : 'White wins on time');
   } else {
@@ -982,8 +1054,10 @@ function applyMoveToBoard(from: string, to: string, mv: any, _isCapture: boolean
       const side = game!.turn() === 'w' ? 'white' : 'black';
       for (const [sq, pm] of boardView!.pieces) { if (pm.type === 'king' && pm.color === side) { boardView!.showCheck(sq); break; } }
     }
+    // The move payload carries the pre-increment clock snapshot; the receiver
+    // adopts it and applies the same increment, so a second clock broadcast
+    // would overwrite that increment with stale values.
     if (gameMode === 'online' && adapter && !wasRemote) adapter.sendMove({ from, to, promotion: mv.promotion, fen: game!.fen(), whiteMs: clock?.whiteMs, blackMs: clock?.blackMs });
-    if (clock && gameMode === 'online' && !wasRemote) adapter?.sendClock(clock.whiteMs, clock.blackMs);
     updateHUD();
     SFX.move();
     if (mv.san.includes('+') || mv.san.includes('#')) { SFX.check(); }
@@ -1029,8 +1103,13 @@ function checkEndAndAI() {
   if (!game) return;
   if (game.isGameOver()) { handleGameOver(); return; }
   if (clock && (clockEnabled || gameMode === 'online')) {
-    if (!clock.started && moveHistory.length >= 1) clock.start(game.turn() === 'w' ? 'w' : 'b');
-    else clock.switchTo(game.turn() === 'w' ? 'w' : 'b');
+    if (!clock.started && moveHistory.length >= 1) {
+      // White always opens; give that move its increment, then start the reply clock.
+      clock.whiteMs += clock.incrementMs;
+      clock.start(game.turn() === 'w' ? 'w' : 'b');
+    } else {
+      clock.switchTo(game.turn() === 'w' ? 'w' : 'b');
+    }
   }
   // AI move
   if (gameMode === 'ai' && game.turn() !== playerColor && !gameOver && !paused) {

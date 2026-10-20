@@ -14,6 +14,6 @@ export function createAdapter(): NetAdapter {
 
 export function resetAdapter(): void { cached = null; }
 
-export type { NetAdapter, NetMove } from './adapter';
+export type { NetAdapter, NetMove, RoomSettings } from './adapter';
 export { LocalAdapter } from './adapter';
 export { SupabaseAdapter } from './supabaseAdapter';
