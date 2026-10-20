@@ -16,15 +16,58 @@ import type { NetAdapter, NetMove, RoomSettings } from './net';
 // startPosition imported via boardView
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-const loading = document.getElementById('loading') as HTMLDivElement;
+const loaderEl = document.getElementById('loader') as HTMLDivElement;
 const errorEl = document.getElementById('error') as HTMLDivElement;
-const loadingText = document.getElementById('loading-text') as HTMLDivElement;
+const loaderLabel = document.getElementById('loader-label') as HTMLParagraphElement;
+const loaderFill = document.getElementById('loader-fill') as HTMLDivElement;
+const loaderBar = document.getElementById('loader-bar') as HTMLDivElement;
+const loaderFile = document.getElementById('loader-file') as HTMLSpanElement;
+const loaderPct = document.getElementById('loader-pct') as HTMLElement;
+const loaderTip = document.getElementById('loader-tip') as HTMLParagraphElement;
 
-// fix id
-const barFillEl = document.getElementById('bar-fill') as HTMLDivElement;
+const LoadingScreen = {
+  tips: [
+    'Lose your king and the battle is lost. Guard it first.',
+    'Control the center early: pawns on e4 and d4 open your pieces.',
+    'Knights are strongest near the middle of the board.',
+    'Castle early to tuck your king behind a wall of pawns.',
+    'Watch the clock in timed matches. Low time turns the clock red.',
+    'Drag to rotate the camera. Press Reset view to return.'
+  ],
+  tipIndex: 0,
+  tipTimer: 0 as number,
+  showTip() { loaderTip.textContent = this.tips[this.tipIndex++ % this.tips.length]; },
+  setProgress(p: number, file?: string) {
+    const pct = Math.round(Math.min(1, Math.max(0, p)) * 100);
+    loaderFill.style.width = pct + '%';
+    loaderPct.textContent = pct + '%';
+    loaderBar.setAttribute('aria-valuenow', String(pct));
+    if (file) loaderFile.textContent = file;
+  },
+  show() {
+    this.tipIndex = Math.floor(Math.random() * this.tips.length);
+    this.showTip();
+    clearInterval(this.tipTimer);
+    this.tipTimer = window.setInterval(() => this.showTip(), 3500);
+    loaderLabel.textContent = 'Setting up the board…';
+    this.setProgress(0, 'Preparing');
+    loaderEl.classList.remove('hide');
+  },
+  finish(): Promise<void> {
+    return new Promise((resolve) => {
+      this.setProgress(1, 'Done');
+      loaderLabel.textContent = 'The board is ready.';
+      setTimeout(() => {
+        loaderEl.classList.add('hide');
+        clearInterval(this.tipTimer);
+        resolve();
+      }, 500);
+    });
+  }
+};
 
 const _ctx = createScene(canvas);
-if (!_ctx) { loading.classList.add('hidden'); errorEl.classList.remove('hidden'); throw new Error('no webgl'); }
+if (!_ctx) { loaderEl.classList.add('hide'); errorEl.classList.remove('hidden'); throw new Error('no webgl'); }
 const ctx = _ctx;
 
 let settings = loadSettings();
@@ -72,7 +115,7 @@ function clearOverlays() {
   // Keep the app's own loading/error overlays in the DOM so they can be
   // shown again; only remove transient menu/game overlays.
   document.querySelectorAll('.overlay').forEach((o) => {
-    if (o.id === 'loading' || o.id === 'error') return;
+    if (o.id === 'loader' || o.id === 'error') return;
     o.remove();
   });
 }
@@ -918,16 +961,13 @@ async function startGame() {
   ctx.group.add(boardView.markerGroup);
   moveHistory = []; capturedBy = { w: [], b: [] }; gameOver = false; selected = null; cinematicActive = false;
 
-  loading.classList.remove('hidden');
-  loadingText.textContent = 'Loading board...';
-  barFillEl.style.width = '0%';
+  LoadingScreen.show();
+  LoadingScreen.setProgress(0, 'Preparing');
   await boardView.loadBoard(SKINS[boardSkin].boardPath);
-  barFillEl.style.width = '40%';
-  loadingText.textContent = 'Loading pieces...';
+  LoadingScreen.setProgress(0.4, 'Loading board');
   await boardView.placeStart();
-  barFillEl.style.width = '100%';
-  loadingText.textContent = 'Ready';
-  setTimeout(() => loading.classList.add('hidden'), 700);
+  LoadingScreen.setProgress(1, 'Done');
+  await LoadingScreen.finish();
 
   ctx.scene.background = new THREE.Color(SKINS[boardSkin].backgroundColor);
 
@@ -1310,9 +1350,8 @@ canvas.addEventListener('click', (e) => {
 });
 
 // ---- Init ----
-loadingText.textContent = 'Ready';
-barFillEl.style.width = '100%';
-setTimeout(() => loading.classList.add('hidden'), 700);
-
-showMenu();
+LoadingScreen.show();
+LoadingScreen.setProgress(0.3, 'Preparing');
+LoadingScreen.setProgress(1, 'Done');
+LoadingScreen.finish().then(() => showMenu());
 renderLoop(ctx, () => { if (boardView) boardView.animateMarkers(); });

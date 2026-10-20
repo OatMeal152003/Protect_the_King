@@ -13,11 +13,22 @@
   <body>
     <div id="app">
       <canvas id="canvas"></canvas>
-      <div id="loading" class="overlay">
-        <div class="loading-box">
-          <div class="title">PROTECT THE KING</div>
-          <div class="bar"><div id="bar-fill"></div></div>
-          <div id="loading-text">Loading...</div>
+      <div class="loader" id="loader" role="status" aria-live="polite">
+        <div class="loader-card">
+          <svg class="loader-crown" viewBox="0 0 11 9" fill="#e0a84a" aria-hidden="true">
+            <rect x="0" y="1" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="10" y="1" width="1" height="1"/>
+            <rect x="0" y="2" width="2" height="1"/><rect x="4" y="1" width="3" height="1"/><rect x="9" y="2" width="2" height="1"/>
+            <rect x="0" y="3" width="11" height="3"/><rect x="1" y="6" width="9" height="1"/><rect x="1" y="8" width="9" height="1"/>
+          </svg>
+          <h1 class="loader-title">Protect the King</h1>
+          <p class="loader-sub" id="loader-label">Setting up the board…</p>
+
+          <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="loader-bar">
+            <div class="bar-fill" id="loader-fill"></div>
+          </div>
+          <div class="loader-row"><span id="loader-file">Preparing</span><b id="loader-pct">0%</b></div>
+
+          <p class="loader-tip" id="loader-tip"></p>
         </div>
       </div>
       <div id="error" class="overlay hidden">
