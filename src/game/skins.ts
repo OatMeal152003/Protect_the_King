@@ -9,7 +9,7 @@ export interface SkinConfig {
   backgroundColor: number;
 }
 
-const BASE = '/assets';
+const BASE = `${import.meta.env.BASE_URL}assets`;
 
 export const SKINS: Record<string, SkinConfig> = {
   classic: {

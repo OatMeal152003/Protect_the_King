@@ -31,8 +31,38 @@ Setup:
 3. Enable Realtime on `rooms` and `moves` (the schema does this via `alter publication`).
 4. Copy the project URL + anon key into `.env`.
 
-## Deploy notes
-- For GitHub Pages, set `base` in `vite.config.ts` to your repo subpath (e.g. `/protect-the-king/`) and add the env vars as repo secrets injected at build time.
+## Deploy
+
+The build is a static site in `dist/`. The Supabase variables must exist **at build time**; they are baked into the bundle.
+
+```
+npm ci
+npm run build
+npm run preview   # local production check
+```
+
+Use the **anon** key only. Never put a Supabase service-role key in this frontend.
+
+### Netlify (recommended)
+1. Push the repo to GitHub/GitLab, or run `npm run build` locally for a drag-and-drop deploy.
+2. In Netlify: **Add new site → Import an existing project**.
+3. Build command: `npm run build`; publish directory: `dist` (already set in `netlify.toml`).
+4. Add environment variables `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` under **Site configuration → Environment variables**.
+5. Deploy. `netlify.toml` also provides the SPA fallback redirect.
+
+For a quick test, build locally with your `.env` present and drag the `dist/` folder into Netlify Drop.
+
+### GitHub Pages
+1. Push the repo to GitHub.
+2. **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+3. **Settings → Secrets and variables → Actions → New repository secret**: add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+4. Push to `main`. `.github/workflows/deploy.yml` builds and deploys automatically.
+5. Open the URL shown in the workflow's `deploy` job.
+
+`vite.config.ts` uses `base: './'`, so the same build works at a root domain or a `/<repo>/` subpath. Board, piece, background, and Stockfish URLs are base-relative.
+
+### Supabase
+Run `supabase/schema.sql` once in the SQL Editor and keep Realtime enabled on `rooms` and `moves`. RLS is enabled, so the anon key is safe to ship. Without the env vars, online mode falls back to the same-browser `BroadcastChannel` adapter.
 
 ## Status
 All 9 build steps implemented:

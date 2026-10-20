@@ -14,7 +14,7 @@ export class AI {
   private readyPromise: Promise<void>;
 
   constructor() {
-    this.worker = new Worker('/stockfish/stockfish-19-lite-single.js');
+    this.worker = new Worker(`${import.meta.env.BASE_URL}stockfish/stockfish-19-lite-single.js`);
     this.readyPromise = new Promise((resolve) => {
       const handler = (e: MessageEvent) => {
         const line = typeof e.data === 'string' ? e.data : e.data?.data ?? String(e.data);

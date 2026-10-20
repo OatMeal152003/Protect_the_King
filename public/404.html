@@ -2,30 +2,34 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
     <title>Protect the King</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Cinzel+Decorative:wght@700;900&family=Jersey+10&family=MedievalSharp&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/src/style.css" />
+    <style>
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: grid;
+        place-items: center;
+        background: radial-gradient(ellipse at 50% 42%, #17301f 0%, #08110c 68%), #08110c;
+        color: #ebe6d6;
+        font-family: "Pixelify Sans", "Courier New", monospace;
+        text-align: center;
+      }
+      a { color: #e0a84a; }
+    </style>
   </head>
   <body>
-    <div id="app">
-      <canvas id="canvas"></canvas>
-      <div id="loading" class="overlay">
-        <div class="loading-box">
-          <div class="title">PROTECT THE KING</div>
-          <div class="bar"><div id="bar-fill"></div></div>
-          <div id="loading-text">Loading...</div>
-        </div>
-      </div>
-      <div id="error" class="overlay hidden">
-        <div class="loading-box">
-          <div class="title">WEBGL NOT AVAILABLE</div>
-          <p>Your browser does not support WebGL. Please use a modern browser.</p>
-        </div>
-      </div>
-    </div>
-    <script type="module" src="/src/main.ts"></script>
+    <p>Returning to the kingdom… <a id="home" href="/">Open Protect the King</a></p>
+    <script>
+      // GitHub Pages serves this file for unknown paths. Project sites live
+      // under /<repo>/, so send the visitor back to that app root.
+      var parts = location.pathname.split('/').filter(Boolean);
+      var base = location.hostname.endsWith('.github.io') && parts.length > 1
+        ? '/' + parts[0] + '/'
+        : '/';
+      var home = document.getElementById('home');
+      if (home) home.href = base;
+      location.replace(base);
+    </script>
   </body>
 </html>
