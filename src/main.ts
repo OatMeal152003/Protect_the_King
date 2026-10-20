@@ -60,9 +60,10 @@ let flushPendingCapture: (() => void) | null = null;
 let gameSession = 0;
 let remoteMove = false;
 let hudInterval: ReturnType<typeof setInterval> | null = null;
-// captured tracking (placeholder)
+type CapturedPiece = { type: string; color: 'white' | 'black' };
 let moveHistory: string[] = [];
-let capturedPieces: string[] = [];
+/** Pieces captured by each side, for the per-player HUD trays. */
+let capturedBy: Record<'w' | 'b', CapturedPiece[]> = { w: [], b: [] };
 let pendingMoves: NetMove[] = [];
 
 // ---- DOM helpers ----
@@ -658,7 +659,7 @@ function showMenu() {
   if (ai) { ai.terminate(); ai = null; }
   if (hudInterval) { clearInterval(hudInterval); hudInterval = null; }
   teardownOnline();
-  document.querySelectorAll('.game-menu-btn, .game-cam-btn').forEach((e) => e.remove());
+  document.querySelectorAll('.hud-buttons, .game-menu-btn, .game-cam-btn').forEach((e) => e.remove());
   document.getElementById('gamehud')?.remove();
 
   const o = overlay(`
@@ -825,11 +826,28 @@ function teardownOnline(): void {
 }
 
 function showGameMenuButton() {
-  document.querySelectorAll('.game-menu-btn, .game-cam-btn').forEach((e) => e.remove());
-  const btn = document.createElement('button');
-  btn.className = 'game-menu-btn';
-  btn.textContent = 'MENU';
-  btn.addEventListener('click', () => {
+  document.querySelectorAll('.hud-buttons, .game-menu-btn, .game-cam-btn').forEach((e) => e.remove());
+  const controls = document.createElement('div');
+  controls.className = 'hud-buttons';
+  controls.setAttribute('role', 'group');
+  controls.setAttribute('aria-label', 'Game controls');
+  controls.innerHTML = `
+    <button class="hud-btn" id="btn-menu" type="button">
+      <svg viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
+        <rect x="1" y="2" width="8" height="1.5"/><rect x="1" y="4.25" width="8" height="1.5"/><rect x="1" y="6.5" width="8" height="1.5"/>
+      </svg>
+      Menu
+    </button>
+    <button class="hud-btn" id="btn-reset-view" type="button">
+      <svg viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
+        <rect x="3" y="1" width="4" height="1.2"/><rect x="2" y="2.2" width="1.2" height="1.2"/><rect x="6.8" y="2.2" width="1.2" height="1.2"/>
+        <rect x="0.8" y="3.4" width="1.2" height="3.2"/><rect x="8" y="3.4" width="1.2" height="3.2"/>
+        <rect x="2" y="6.6" width="1.2" height="1.2"/><rect x="6.8" y="6.6" width="1.2" height="1.2"/><rect x="3" y="7.8" width="4" height="1.2"/>
+        <rect x="4.2" y="4.2" width="1.6" height="1.6"/>
+      </svg>
+      Reset view
+    </button>`;
+  controls.querySelector('#btn-menu')?.addEventListener('click', () => {
     SFX.click();
     if (isMultiplayer()) {
       const o = overlay(`
@@ -850,14 +868,11 @@ function showGameMenuButton() {
       togglePause();
     }
   });
-  document.body.appendChild(btn);
-
-  const camBtn = document.createElement('button');
-  camBtn.className = 'game-menu-btn game-cam-btn';
-  camBtn.style.left = '90px';
-  camBtn.textContent = 'RESET VIEW';
-  camBtn.addEventListener('click', () => { SFX.click(); ctx.resetView(playerColor === 'b'); });
-  document.body.appendChild(camBtn);
+  controls.querySelector('#btn-reset-view')?.addEventListener('click', () => {
+    SFX.click();
+    ctx.resetView(playerColor === 'b');
+  });
+  document.body.appendChild(controls);
 }
 
 function togglePause() {
@@ -896,7 +911,7 @@ async function startGame() {
   // clear group
   while (ctx.group.children.length) ctx.group.remove(ctx.group.children[0]);
   ctx.group.add(boardView.markerGroup);
-  moveHistory = []; capturedPieces = []; gameOver = false; selected = null; cinematicActive = false;
+  moveHistory = []; capturedBy = { w: [], b: [] }; gameOver = false; selected = null; cinematicActive = false;
 
   loading.classList.remove('hidden');
   loadingText.textContent = 'Loading board...';
@@ -963,36 +978,68 @@ async function startGame() {
 }
 
 function ensureHUD() {
-  let h = document.getElementById('gamehud');
-  if (h) return;
-  h = document.createElement('div');
+  if (hudInterval) { clearInterval(hudInterval); hudInterval = null; }
+  document.getElementById('gamehud')?.remove();
+  const h = document.createElement('aside');
   h.id = 'gamehud';
-  h.style.cssText = 'position:fixed;top:12px;right:12px;width:250px;max-height:88vh;overflow:hidden;background:linear-gradient(180deg,rgba(57,49,44,0.95),rgba(28,27,25,0.95));border:3px solid #C89B42;border-radius:6px;padding:12px;color:#F2E9D5;font-family:"Jersey 10",monospace;font-size:14px;z-index:5;box-shadow:0 8px 24px rgba(0,0,0,0.6),inset 0 0 0 2px rgba(0,0,0,0.3);backdrop-filter:blur(4px);';
+  h.classList.toggle('untimed', !clock);
+  h.setAttribute('aria-label', 'Game panel');
+  const clockW = clock ? clock.format(clock.whiteMs) : '';
+  const clockB = clock ? clock.format(clock.blackMs) : '';
   h.innerHTML = `
-    <div class="hud-title" style="text-align:center;font-size:0.95rem;letter-spacing:1px;white-space:nowrap;color:#C89B42;margin-bottom:10px;font-family:'Cinzel Decorative',serif;text-shadow:0 2px 0 rgba(0,0,0,0.6);border-bottom:1px solid rgba(200,155,66,0.4);padding-bottom:8px;">PROTECT THE KING</div>
-    <div id="clockrow" style="display:${clock ? 'flex' : 'none'};gap:6px;margin-bottom:10px;">
-      <div id="clkW" style="flex:1;text-align:center;padding:6px;border-radius:4px;background:rgba(28,27,25,0.7);border:2px solid #C89B42;">W 10:00</div>
-      <div id="clkB" style="flex:1;text-align:center;padding:6px;border-radius:4px;background:rgba(28,27,25,0.7);border:2px solid #C89B42;">B 10:00</div>
+    <h1 class="side-title">
+      <svg viewBox="0 0 11 9" fill="currentColor" aria-hidden="true">
+        <rect x="0" y="1" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="10" y="1" width="1" height="1"/>
+        <rect x="0" y="2" width="2" height="1"/><rect x="4" y="1" width="3" height="1"/><rect x="9" y="2" width="2" height="1"/>
+        <rect x="0" y="3" width="11" height="3"/><rect x="1" y="6" width="9" height="1"/><rect x="1" y="8" width="9" height="1"/>
+      </svg>
+      Protect the King
+    </h1>
+    <div class="players">
+      <div class="player" id="cardB">
+        <div class="player-chip black" aria-hidden="true">♚</div>
+        <div class="who"><b>Black</b><div class="tray" id="trayB" role="img" aria-label="Black has no captures"></div></div>
+        <div class="clock" id="clkB" aria-label="Black clock">${clockB}</div>
+      </div>
+      <div class="player" id="cardW">
+        <div class="player-chip white" aria-hidden="true">♔</div>
+        <div class="who"><b>White</b><div class="tray" id="trayW" role="img" aria-label="White has no captures"></div></div>
+        <div class="clock" id="clkW" aria-label="White clock">${clockW}</div>
+      </div>
     </div>
-    <div id="turn" style="text-align:center;padding:4px 6px;margin-bottom:8px;border-radius:4px;font-size:0.95rem;letter-spacing:2px;color:#F2E9D5;background:rgba(28,27,25,0.5);border:1px solid rgba(200,155,66,0.3);">WHITE'S TURN</div>
-    <div id="moves-section">
-      <div style="font-size:0.9rem;letter-spacing:2px;color:#C89B42;margin-bottom:4px;font-family:'Cinzel Decorative',serif;">MOVES</div>
-      <div id="movelist" style="max-height:46vh;overflow:auto;line-height:1.9;padding-right:4px;"></div>
+    <div class="status" id="turn" data-turn="white" role="status" aria-live="polite" aria-atomic="true">
+      <i aria-hidden="true"></i><span id="turn-text">White to move</span>
     </div>
-    <div style="font-size:0.9rem;letter-spacing:2px;color:#C89B42;margin:8px 0 4px;font-family:'Cinzel Decorative',serif;">CAPTURED</div>
-    <div id="captured" style="min-height:24px;font-size:16px;letter-spacing:2px;color:#ff8899;"></div>`;
+    <div class="moves-section" id="moves-section">
+      <h2 class="sec-head" id="moves-heading">Moves</h2>
+      <div class="moves" id="movelist" role="log" aria-live="polite" aria-labelledby="moves-heading"></div>
+    </div>`;
   document.body.appendChild(h);
-  if (hudInterval) clearInterval(hudInterval);
   hudInterval = setInterval(() => {
-    if (clock && !gameOver && !paused) {
-      const w = document.getElementById('clkW'); const b = document.getElementById('clkB');
-      if (w) w.textContent = 'W: ' + clock.format(clock.whiteMs);
-      if (b) b.textContent = 'B: ' + clock.format(clock.blackMs);
+    if (!clock || gameOver || paused) return;
+    const w = document.getElementById('clkW');
+    const b = document.getElementById('clkB');
+    if (w) {
+      w.textContent = clock.format(clock.whiteMs);
+      w.classList.toggle('low', clock.whiteMs <= 30_000);
+    }
+    if (b) {
+      b.textContent = clock.format(clock.blackMs);
+      b.classList.toggle('low', clock.blackMs <= 30_000);
     }
   }, 200);
 }
 
 const PIECE_SYMBOL: Record<string, string> = { pawn: '♟', knight: '♞', bishop: '♝', rook: '♜', queen: '♛', king: '♚' };
+function renderCapturedTray(el: HTMLElement, pieces: CapturedPiece[], side: 'White' | 'Black'): void {
+  el.innerHTML = pieces
+    .map((p) => `<span class="cap-piece ${p.color}" aria-hidden="true" title="${p.color} ${p.type}">${PIECE_SYMBOL[p.type] || ''}</span>`)
+    .join('');
+  const label = pieces.length
+    ? `${side} captured: ${pieces.map((p) => p.type).join(', ')}`
+    : `${side} has no captures`;
+  el.setAttribute('aria-label', label);
+}
 function updateHUD() {
   const ml = document.getElementById('movelist');
   if (ml) {
@@ -1001,14 +1048,17 @@ function updateHUD() {
       const n = Math.floor(i / 2) + 1;
       const w = moveHistory[i] || '';
       const b = moveHistory[i + 1] || '';
-      const bg = i % 4 === 0 ? 'rgba(200,155,66,0.08)' : 'transparent';
-      html += `<div style="display:flex;padding:3px 6px;border-radius:4px;background:${bg};border-bottom:1px solid rgba(200,155,66,0.15);"><span style="width:24px;opacity:0.6;color:#C89B42;">${n}.</span><span style="flex:1;color:#F2E9D5;">${w}</span><span style="flex:1;color:#ff8899;">${b}</span></div>`;
+      const lastW = i === moveHistory.length - 1;
+      const lastB = i + 1 === moveHistory.length - 1;
+      html += `<div class="mv-row"><span class="n">${n}.</span><span class="w${lastW ? ' last' : ''}">${w}</span><span class="b${lastB ? ' last' : ''}">${b}</span></div>`;
     }
-    ml.innerHTML = html;
+    ml.innerHTML = html || '<div class="moves-empty" aria-hidden="true">Moves will appear here.</div>';
     ml.scrollTop = ml.scrollHeight;
   }
-  const cap = document.getElementById('captured');
-  if (cap) cap.textContent = capturedPieces.map((p) => PIECE_SYMBOL[p] || p).join(' ');
+  const trayW = document.getElementById('trayW');
+  if (trayW) renderCapturedTray(trayW, capturedBy.w, 'White');
+  const trayB = document.getElementById('trayB');
+  if (trayB) renderCapturedTray(trayB, capturedBy.b, 'Black');
 }
 
 // ---- Move application ----
@@ -1028,8 +1078,9 @@ function applyMoveToBoard(from: string, to: string, mv: any, _isCapture: boolean
     if (session !== gameSession) return; // a late callback from a previous game
     clock?.resume();
     if (isCaptureMove) {
-      if (victim) capturedPieces.push(victim.type);
-      else if (mv.flags?.includes('e')) capturedPieces.push('pawn');
+      const mover = (mv.color === 'b' ? 'b' : 'w') as 'w' | 'b';
+      if (victim) capturedBy[mover].push({ type: victim.type, color: victim.color });
+      else if (mv.flags?.includes('e')) capturedBy[mover].push({ type: 'pawn', color: mover === 'w' ? 'black' : 'white' });
     }
     if (promo) {
       boardView!.removePiece(from);
@@ -1112,32 +1163,28 @@ function checkEndAndAI() {
     }
   }
   // AI move
-  if (gameMode === 'ai' && game.turn() !== playerColor && !gameOver && !paused) {
-    const turnEl = document.getElementById('turn');
-    if (turnEl) turnEl.textContent = 'AI THINKING...';
+  const aiTurn = gameMode === 'ai' && game.turn() !== playerColor && !gameOver && !paused;
+  hudUpdateTurn();
+  if (aiTurn) {
+    const turnText = document.getElementById('turn-text');
+    if (turnText) turnText.textContent = 'AI thinking…';
     setTimeout(() => { if (!paused) doAIMove(); }, 300);
   }
-  // (online send handled in applyMoveToBoard)
-  hudUpdateTurn();
 }
 
 function hudUpdateTurn() {
-  const turnEl = document.getElementById('turn');
   if (!game) return;
-  const side = game.turn() === 'w' ? 'White' : 'Black';
+  const isWhite = game.turn() === 'w';
   const isCheck = game.isCheck();
+  const turnEl = document.getElementById('turn');
+  const turnText = document.getElementById('turn-text');
   if (turnEl) {
-    turnEl.textContent = isCheck ? `${side.toUpperCase()} IN CHECK!` : `${side.toUpperCase()}'S TURN`;
-    turnEl.style.color = isCheck ? '#ff5566' : '#F2E9D5';
-    turnEl.style.borderColor = isCheck ? '#ff3355' : 'rgba(200,155,66,0.3)';
-    turnEl.style.background = isCheck ? 'rgba(181,46,50,0.25)' : 'rgba(28,27,25,0.5)';
+    turnEl.dataset.turn = isWhite ? 'white' : 'black';
+    turnEl.classList.toggle('check', isCheck);
   }
-  // highlight active clock
-  const w = document.getElementById('clkW'); const b = document.getElementById('clkB');
-  if (w) w.style.borderColor = game.turn() === 'w' ? '#ffd700' : 'rgba(200,155,66,0.4)';
-  if (b) b.style.borderColor = game.turn() === 'b' ? '#ffd700' : 'rgba(200,155,66,0.4)';
-  if (w) w.style.opacity = game.turn() === 'w' ? '1' : '0.6';
-  if (b) b.style.opacity = game.turn() === 'b' ? '1' : '0.6';
+  if (turnText) turnText.textContent = isCheck ? 'Check! Protect the king' : `${isWhite ? 'White' : 'Black'} to move`;
+  document.getElementById('cardW')?.classList.toggle('active', isWhite);
+  document.getElementById('cardB')?.classList.toggle('active', !isWhite);
 }
 
 async function doAIMove() {
@@ -1156,6 +1203,8 @@ function handleGameOver() {
   gameOver = true;
   teardownOnline();
   if (clock) clock.stop();
+  if (hudInterval) { clearInterval(hudInterval); hudInterval = null; }
+  document.querySelectorAll('.hud-buttons, .game-menu-btn, .game-cam-btn').forEach((e) => e.remove());
   let msg = 'Game over';
   if (game!.isCheckmate()) msg = `Checkmate! ${game!.turn() === 'w' ? 'Black' : 'White'} wins`;
   else if (game!.isStalemate()) msg = 'Stalemate';
@@ -1181,7 +1230,7 @@ function endGame(msg: string) {
   teardownOnline();
   if (clock) clock.stop();
   if (hudInterval) { clearInterval(hudInterval); hudInterval = null; }
-  document.querySelectorAll('.game-menu-btn, .game-cam-btn').forEach((e) => e.remove());
+  document.querySelectorAll('.hud-buttons, .game-menu-btn, .game-cam-btn').forEach((e) => e.remove());
   SFX.mate();
   const o = overlay(`
     <div class="menu-card">

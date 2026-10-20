@@ -9,6 +9,16 @@
   --c-grass: #3E7542;
   --c-sky: #287DA5;
   --c-ivory: #F2E9D5;
+  --hud-slate: #121c16;
+  --hud-moss: #1d2c23;
+  --hud-moss-hi: #2a3d31;
+  --hud-gold: #e0a84a;
+  --hud-gold-dim: #8a6a2f;
+  --hud-bone: #ebe6d6;
+  --hud-bone-dim: #a9b3a6;
+  --hud-ember: #d8433b;
+  --hud-font: "Pixelify Sans", "Courier New", monospace;
+  --hud-title-font: "MedievalSharp", Georgia, serif;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -302,8 +312,290 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
   text-align: center; line-height: 1.4;
 }
 
-/* HUD */
-#gamehud { font-family: "Rajdhani", sans-serif; }
+/* =====================================================
+   IN-GAME HUD
+   Pixel-framed sidebar and menu controls.
+   ===================================================== */
+
+/* ---------- Top-left game controls ---------- */
+.hud-buttons {
+  position: fixed;
+  top: 18px;
+  left: 18px;
+  display: flex;
+  gap: 14px;
+  z-index: 7;
+  font-family: var(--hud-font);
+}
+.hud-btn {
+  --frame: var(--hud-gold-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 11px 12px;
+  border: 0;
+  background: linear-gradient(var(--hud-moss-hi), var(--hud-moss) 55%, var(--hud-slate));
+  color: var(--hud-bone);
+  font: 600 15px/1 var(--hud-font);
+  letter-spacing: .04em;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  box-shadow:
+    0 -3px 0 0 var(--frame), 0 3px 0 0 var(--frame),
+    -3px 0 0 0 var(--frame), 3px 0 0 0 var(--frame),
+    inset 0 2px 0 rgba(255,255,255,.12),
+    inset 0 -4px 0 rgba(0,0,0,.45),
+    0 8px 0 -1px rgba(0,0,0,.45);
+  transition: transform .08s steps(2), color .12s, box-shadow .12s;
+}
+.hud-btn svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  shape-rendering: crispEdges;
+}
+.hud-btn:hover { --frame: var(--hud-gold); color: #fff3d6; }
+.hud-btn:active {
+  transform: translateY(3px);
+  box-shadow:
+    0 -3px 0 0 var(--frame), 0 3px 0 0 var(--frame),
+    -3px 0 0 0 var(--frame), 3px 0 0 0 var(--frame),
+    inset 0 2px 0 rgba(0,0,0,.35),
+    inset 0 -1px 0 rgba(0,0,0,.45),
+    0 3px 0 -1px rgba(0,0,0,.45);
+}
+.hud-btn:focus-visible { outline: 3px solid var(--hud-bone); outline-offset: 5px; }
+
+/* ---------- Move sidebar ---------- */
+#gamehud {
+  --frame: var(--hud-gold-dim);
+  position: fixed;
+  top: 22px;
+  right: 22px;
+  width: min(300px, calc(100vw - 44px));
+  max-height: calc(100vh - 44px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 16px 14px;
+  background:
+    linear-gradient(180deg, rgba(224,168,74,.07), transparent 90px),
+    var(--hud-slate);
+  color: var(--hud-bone);
+  font-family: var(--hud-font);
+  z-index: 7;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--hud-gold-dim) transparent;
+  box-shadow:
+    0 -3px 0 0 var(--frame), 0 3px 0 0 var(--frame),
+    -3px 0 0 0 var(--frame), 3px 0 0 0 var(--frame),
+    inset 0 0 0 2px rgba(0,0,0,.5),
+    inset 0 0 0 4px rgba(255,255,255,.04),
+    0 14px 0 -2px rgba(0,0,0,.35);
+}
+#gamehud::before,
+#gamehud::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  width: 4px;
+  height: 4px;
+  background: var(--hud-gold);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.6);
+}
+#gamehud::before { left: 7px; }
+#gamehud::after { right: 7px; }
+
+#gamehud .side-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 2px 0 0;
+  padding-bottom: 12px;
+  border-bottom: 2px dashed rgba(224,168,74,.28);
+  color: var(--hud-gold);
+  font: 400 21px/1 var(--hud-title-font);
+  letter-spacing: .02em;
+  text-shadow: 0 2px 0 #000;
+}
+#gamehud .side-title svg {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  shape-rendering: crispEdges;
+}
+
+/* ---------- Player cards ---------- */
+#gamehud .players { display: flex; flex-direction: column; gap: 8px; }
+#gamehud .player {
+  --frame: transparent;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  padding: 9px 10px 9px 9px;
+  background: var(--hud-moss);
+  box-shadow:
+    0 -3px 0 0 var(--frame), 0 3px 0 0 var(--frame),
+    -3px 0 0 0 var(--frame), 3px 0 0 0 var(--frame),
+    inset 0 -3px 0 rgba(0,0,0,.35);
+  transition: box-shadow .15s, background .15s;
+}
+#gamehud .player.active {
+  --frame: var(--hud-gold);
+  background: linear-gradient(90deg, rgba(224,168,74,.16), var(--hud-moss) 70%);
+}
+#gamehud .player-chip {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", serif;
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: default;
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,.55);
+}
+#gamehud .player-chip.white { background: #d9d6cb; color: var(--hud-ember); }
+#gamehud .player-chip.black { background: #0c0d0f; color: var(--hud-gold); }
+#gamehud .who { min-width: 0; }
+#gamehud .who b {
+  display: block;
+  color: var(--hud-bone);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+#gamehud .tray {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-height: 16px;
+  margin-top: 3px;
+  color: var(--hud-bone-dim);
+  font-size: 15px;
+  line-height: 16px;
+  letter-spacing: -.08em;
+}
+#gamehud .tray:empty::before {
+  content: "No captures";
+  font-size: 12px;
+  letter-spacing: 0;
+  opacity: .55;
+}
+#gamehud .cap-piece {
+  font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", serif;
+  font-size: 15px;
+  line-height: 1;
+}
+#gamehud .cap-piece.black { color: var(--hud-gold); }
+#gamehud .cap-piece.white { color: var(--hud-bone); }
+#gamehud .clock {
+  min-width: 68px;
+  padding: 6px 8px;
+  background: #070c09;
+  color: var(--hud-bone);
+  font: 700 19px/1 var(--hud-font);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,.7), inset 0 -3px 0 rgba(255,255,255,.05);
+  transition: color .12s, background .12s;
+}
+#gamehud .player.active .clock { color: var(--hud-gold); }
+#gamehud .clock.low {
+  background: var(--hud-ember);
+  color: #fff;
+  animation: hud-low 1s steps(2) infinite;
+}
+@keyframes hud-low { 50% { background: #8f2620; } }
+
+/* Untimed games keep the player cards but drop the clock column. */
+#gamehud.untimed .player { grid-template-columns: 34px minmax(0, 1fr); }
+#gamehud.untimed .clock { display: none; }
+
+/* ---------- Turn / status banner ---------- */
+#gamehud .status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 9px 10px;
+  background: #0b140f;
+  color: var(--hud-bone);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,.6);
+}
+#gamehud .status i {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  background: var(--hud-bone);
+  box-shadow: 0 0 0 2px #000;
+}
+#gamehud .status[data-turn="white"] i { background: #d9d6cb; box-shadow: 0 0 0 2px var(--hud-ember); }
+#gamehud .status[data-turn="black"] i { background: #000; box-shadow: 0 0 0 2px var(--hud-gold); }
+#gamehud .status.check {
+  background: #3a1411;
+  color: #fff;
+  box-shadow: inset 0 0 0 2px var(--hud-ember);
+}
+#gamehud .status.check i {
+  background: var(--hud-ember);
+  animation: hud-low 1s steps(2) infinite;
+}
+
+/* ---------- Move list ---------- */
+#gamehud .moves-section { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+#gamehud .sec-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--hud-gold);
+  font: 400 16px/1 var(--hud-title-font);
+  text-shadow: 0 2px 0 #000;
+}
+#gamehud .sec-head::after { content: ""; flex: 1; height: 2px; background: rgba(224,168,74,.22); }
+#gamehud .moves {
+  max-height: 168px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #0b140f;
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,.6);
+  scrollbar-width: thin;
+  scrollbar-color: var(--hud-gold-dim) transparent;
+}
+#gamehud .moves-empty {
+  padding: 14px 12px;
+  color: var(--hud-bone-dim);
+  font-size: 13px;
+  opacity: .7;
+}
+#gamehud .mv-row {
+  display: grid;
+  grid-template-columns: 34px 1fr 1fr;
+  align-items: center;
+  font-size: 15px;
+  font-weight: 500;
+}
+#gamehud .mv-row:nth-child(even) { background: rgba(255,255,255,.025); }
+#gamehud .mv-row .n { padding: 6px 0 6px 10px; color: var(--hud-bone-dim); font-size: 13px; }
+#gamehud .mv-row .w,
+#gamehud .mv-row .b { min-height: 27px; padding: 6px 10px; }
+#gamehud .mv-row .w { color: var(--hud-bone); }
+#gamehud .mv-row .b { color: #e98aa0; }
+#gamehud .mv-row .last { background: var(--hud-gold); color: #1a1205; font-weight: 700; }
 
 /* Responsive */
 @media (max-width: 1180px) {
@@ -346,30 +638,46 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
 }
 
 /* ---- Mobile HUD ---- */
-@media (max-width: 640px) {
-  #gamehud {
-    top: auto !important; bottom: 8px !important; right: 8px !important; left: 8px !important;
-    width: auto !important; max-height: 26vh !important;
-    padding: 10px 12px !important;
-  }
-  #gamehud .hud-title,
-  #gamehud #moves-section { display: none !important; }
-  #gamehud #clockrow { margin-bottom: 8px !important; }
-  .game-menu-btn, .game-cam-btn { font-size: 0.8rem !important; padding: 6px 10px !important; }
-  .game-cam-btn { left: 72px !important; }
-}
+@media (max-width: 720px) {
+  .hud-buttons { top: 10px; left: 10px; gap: 10px; }
+  .hud-btn { gap: 8px; padding: 8px 12px 9px 10px; font-size: 14px; }
+  .hud-btn svg { width: 18px; height: 18px; }
 
-/* ---- In-game menu/pause button ---- */
-.game-menu-btn {
-  position: fixed; top: 12px; left: 12px; z-index: 6;
-  padding: 8px 14px;
-  background: linear-gradient(180deg, var(--c-walnut), var(--c-stone));
-  border: 2px solid var(--c-gold); color: var(--c-ivory);
-  font-family: "Jersey 10", monospace; font-size: 1rem; letter-spacing: 2px;
-  cursor: pointer; transition: all 0.12s;
-  box-shadow: 0 3px 0 rgba(0,0,0,0.4);
+  #gamehud {
+    top: auto;
+    right: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    left: 10px;
+    width: auto;
+    max-height: 32vh;
+    padding: 11px 12px 10px;
+    gap: 8px;
+  }
+  /* Keep the phone HUD compact so it doesn't swallow the board. */
+  #gamehud .side-title,
+  #gamehud .moves-section { display: none; }
+  #gamehud .players { gap: 6px; }
+  #gamehud .player {
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    column-gap: 8px;
+    padding: 7px 9px 7px 8px;
+  }
+  #gamehud.untimed .player { grid-template-columns: 30px minmax(0, 1fr); }
+  #gamehud .player-chip { width: 30px; height: 30px; font-size: 19px; }
+  #gamehud .who b { font-size: 14px; }
+  #gamehud .tray { min-height: 14px; margin-top: 2px; font-size: 13px; line-height: 14px; }
+  #gamehud .tray:empty::before { font-size: 11px; }
+  #gamehud .cap-piece { font-size: 13px; }
+  #gamehud .clock { min-width: 60px; padding: 5px 7px; font-size: 17px; }
+  #gamehud .status { gap: 8px; padding: 7px 9px; font-size: 14px; }
+  #gamehud .status i { width: 8px; height: 8px; }
 }
-.game-menu-btn:hover { background: linear-gradient(180deg, var(--c-crimson), #8E1F22); transform: translateY(-1px); }
+@media (max-width: 420px) {
+  .hud-btn { gap: 7px; padding: 7px 9px 8px 8px; font-size: 12.5px; }
+  .hud-btn svg { width: 16px; height: 16px; }
+  #gamehud { max-height: 36vh; }
+  #gamehud .clock { min-width: 56px; font-size: 16px; }
+}
 
 /* ---- Battle intro ---- */
 .battle-intro {
