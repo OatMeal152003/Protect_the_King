@@ -927,7 +927,7 @@ async function startGame() {
   await boardView.placeStart();
   barFillEl.style.width = '100%';
   loadingText.textContent = 'Ready';
-  setTimeout(() => loading.classList.add('hidden'), 200);
+  setTimeout(() => loading.classList.add('hidden'), 700);
 
   ctx.scene.background = new THREE.Color(SKINS[boardSkin].backgroundColor);
 
@@ -1312,7 +1312,7 @@ canvas.addEventListener('click', (e) => {
 // ---- Init ----
 loadingText.textContent = 'Ready';
 barFillEl.style.width = '100%';
-setTimeout(() => loading.classList.add('hidden'), 200);
+setTimeout(() => loading.classList.add('hidden'), 700);
 
 showMenu();
 renderLoop(ctx, () => { if (boardView) boardView.animateMarkers(); });
