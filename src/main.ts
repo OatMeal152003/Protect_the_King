@@ -69,7 +69,12 @@ let pendingMoves: NetMove[] = [];
 // ---- DOM helpers ----
 function clearOverlays() {
   disposeSkinPreview();
-  document.querySelectorAll('.overlay').forEach((o) => o.remove());
+  // Keep the app's own loading/error overlays in the DOM so they can be
+  // shown again; only remove transient menu/game overlays.
+  document.querySelectorAll('.overlay').forEach((o) => {
+    if (o.id === 'loading' || o.id === 'error') return;
+    o.remove();
+  });
 }
 let toastEl: HTMLDivElement | null = null;
 let toastTimer: number | undefined;

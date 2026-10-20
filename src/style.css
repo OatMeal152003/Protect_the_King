@@ -30,6 +30,47 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     radial-gradient(ellipse at 50% 52%, rgba(12,8,9,0.16) 0%, rgba(12,8,9,0.58) 74%, rgba(12,8,9,0.88) 100%),
     url("/menu-bg.png") center/cover no-repeat;
   animation: fadeIn 0.35s ease-out both; }
+.loading-box {
+  width: min(360px, 90vw);
+  padding: 32px 28px;
+  text-align: center;
+  background: rgba(28,27,25,0.82);
+  border: 3px solid var(--c-gold);
+  box-shadow: 0 14px 40px rgba(0,0,0,0.65), inset 0 0 0 2px rgba(0,0,0,0.35);
+  animation: cardIn 0.35s ease-out both;
+}
+.hidden { display: none !important; }
+.loading-box .title {
+  margin-bottom: 18px;
+  font-family: "Cinzel Decorative", "MedievalSharp", serif;
+  font-size: clamp(1.6rem, 5vw, 2.2rem);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: var(--c-gold);
+  text-shadow: 0 3px 0 rgba(0,0,0,0.7);
+}
+.loading-box .bar {
+  width: 100%;
+  height: 14px;
+  margin: 0 auto 14px;
+  padding: 2px;
+  background: rgba(0,0,0,0.55);
+  border: 2px solid var(--c-gold-dim, #8e6b2c);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+}
+#bar-fill {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #b8862f, #ffd88a, #b8862f);
+  transition: width 0.2s ease-out;
+}
+#loading-text {
+  font-family: "Pixelify Sans", "Courier New", monospace;
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  color: var(--c-ivory);
+  opacity: 0.85;
+}
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 .menu-card { animation: cardIn 0.35s ease-out both; }
 @keyframes cardIn { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
