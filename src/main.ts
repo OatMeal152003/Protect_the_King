@@ -31,21 +31,23 @@ let settings = loadSettings();
 ctx.applyPixelSize(settings.width, settings.height);
 
 // ---- State ----
-type Screen = 'menu' | 'mode' | 'skins' | 'settings' | 'game' | 'gameover' | 'online';
+type Screen = 'menu' | 'game';
 let screen: Screen = 'menu';
 let pieceSkin = localStorage.getItem('ptk_pieceSkin') || 'classic';
 let boardSkin = localStorage.getItem('ptk_boardSkin') || 'classic';
 let cinematicsMode: 'on' | 'short' | 'off' = (localStorage.getItem('ptk_cine') as any) || 'on';
 let volumeOn = localStorage.getItem('ptk_vol') !== '0';
+SFX.setMuted(!volumeOn);
 
 let game: ChessGame | null = null;
 let boardView: BoardView | null = null;
 let clock: Clock | null = null;
 let ai: AI | null = null;
 let adapter: NetAdapter | null = null;
-let gameMode: 'ai' | 'classic' | 'timed' | 'online' | 'local' = 'classic';
+let gameMode: 'ai' | 'classic' | 'timed' | 'online' = 'classic';
 let difficulty: Difficulty = 'medium';
 let timedPreset: { min: number; inc: number } = { min: 10, inc: 0 };
+let clockEnabled = false;
 let playerColor: 'w' | 'b' = 'w';
 let selected: string | null = null;
 let gameOver = false;
@@ -64,13 +66,23 @@ let capturedPieces: string[] = [];
 let pendingMoves: NetMove[] = [];
 
 // ---- DOM helpers ----
-function clearOverlays() { document.querySelectorAll('.overlay').forEach((o) => o.remove()); }
+function clearOverlays() {
+  disposeSkinPreview();
+  document.querySelectorAll('.overlay').forEach((o) => o.remove());
+}
+let toastEl: HTMLDivElement | null = null;
+let toastTimer: number | undefined;
 function showToast(msg: string, ms = 3000): void {
-  const t = document.createElement('div');
-  t.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:60;padding:10px 18px;background:linear-gradient(180deg,#B52E32,#8E1F22);border:2px solid #C89B42;color:#F2E9D5;font-family:"Jersey 10",monospace;font-size:1rem;letter-spacing:2px;box-shadow:0 4px 16px rgba(0,0,0,0.5);animation:fadeIn 0.2s ease-out;';
-  t.textContent = msg;
-  document.body.appendChild(t);
-  setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; setTimeout(() => t.remove(), 300); }, ms);
+  if (!toastEl || !document.body.contains(toastEl)) {
+    toastEl = document.createElement('div');
+    toastEl.className = 'toast';
+    toastEl.setAttribute('role', 'status');
+    document.body.appendChild(toastEl);
+  }
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  if (toastTimer) window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => toastEl?.classList.remove('show'), ms);
 }
 function showConfirm(msg: string, onYes: () => void): void {
   const o = overlay(`
@@ -85,15 +97,6 @@ function showConfirm(msg: string, onYes: () => void): void {
   o.querySelector('[data-act="yes"]')?.addEventListener('click', () => { SFX.click(); clearOverlays(); onYes(); });
   o.querySelector('[data-act="no"]')?.addEventListener('click', () => { SFX.click(); clearOverlays(); });
 }
-function showAlert(msg: string): void {
-  const o = overlay(`
-    <div class="menu-card">
-      <div class="title" style="font-size:1.1rem;">NOTICE</div>
-      <div style="margin:12px 0 18px;font-size:1rem;color:#F2E9D5;text-align:center;">${msg}</div>
-      <button data-act="ok">OK</button>
-    </div>`);
-  o.querySelector('[data-act="ok"]')?.addEventListener('click', () => { SFX.click(); clearOverlays(); });
-}
 function overlay(html: string): HTMLDivElement {
   clearOverlays();
   const d = document.createElement('div');
@@ -104,6 +107,474 @@ function overlay(html: string): HTMLDivElement {
 }
 
 // ---- Main Menu ----
+type MenuTab = 'play' | 'online' | 'local' | 'skins' | 'settings';
+type TimeKey = 'none' | 'bullet' | 'blitz' | 'rapid' | 'classical';
+type SideChoice = 'white' | 'random' | 'black';
+type MenuLevel = 'easy' | 'medium' | 'hard' | 'expert';
+
+const TIME_PRESETS: Record<Exclude<TimeKey, 'none'>, { label: string; note: string; min: number; inc: number }> = {
+  bullet: { label: 'Bullet', note: '1 min', min: 1, inc: 0 },
+  blitz: { label: 'Blitz', note: '3 + 2', min: 3, inc: 2 },
+  rapid: { label: 'Rapid', note: '10 min', min: 10, inc: 0 },
+  classical: { label: 'Classical', note: '30 min', min: 30, inc: 0 },
+};
+const TIME_ORDER: TimeKey[] = ['none', 'bullet', 'blitz', 'rapid', 'classical'];
+const MENU_LEVELS: Record<MenuLevel, { label: string; hint: string }> = {
+  easy: { label: 'Easy', hint: 'Makes mistakes. Good for learning.' },
+  medium: { label: 'Medium', hint: 'Plays sensible moves.' },
+  hard: { label: 'Hard', hint: 'Punishes loose pieces.' },
+  expert: { label: 'Expert', hint: 'No mercy for the careless.' },
+};
+const LEVEL_ORDER: MenuLevel[] = ['easy', 'medium', 'hard', 'expert'];
+const SIDE_ORDER: SideChoice[] = ['white', 'random', 'black'];
+
+let menuTab: MenuTab = 'play';
+let menuLevel: MenuLevel = 'medium';
+let menuTime: TimeKey = 'rapid';
+let menuSide: SideChoice = 'white';
+let localTime: TimeKey = 'none';
+let menuRoomCode = '';
+let menuRooms: { code: string; created_at: string }[] = [];
+let menuRoomsStatus: 'idle' | 'loading' | 'ready' | 'error' = 'idle';
+let menuRoomsError = '';
+let menuRoot: HTMLElement | null = null;
+
+const MENU_ITEMS: { id: MenuTab | 'puzzles'; label: string; icon: string; disabled?: boolean }[] = [
+  { id: 'play', label: 'Play chess', icon: 'crown' },
+  { id: 'online', label: 'Online multiplayer', icon: 'swords' },
+  { id: 'local', label: 'Local multiplayer', icon: 'pawn' },
+  { id: 'puzzles', label: 'Puzzles & challenges', icon: 'puzzle', disabled: true },
+  { id: 'skins', label: 'Skins & boards', icon: 'shield' },
+  { id: 'settings', label: 'Settings', icon: 'gear' },
+];
+const MENU_ICONS: Record<string, string> = {
+  crown: '<path d="M3 18h18l-1.5-9-4.5 4-3-7-3 7-4.5-4z" fill="currentColor"/>',
+  swords: '<path d="M4 4l9 9m-2 2l-4 4M20 4l-9 9m2 2l4 4M3 21l3-3m15 3l-3-3" stroke="currentColor" stroke-width="2.2" fill="none"/>',
+  pawn: '<circle cx="12" cy="7" r="3.5" fill="currentColor"/><path d="M8 20c0-5 2-6 4-6s4 1 4 6z" fill="currentColor"/>',
+  puzzle: '<path d="M5 5h5a2 2 0 114 0h5v5a2 2 0 100 4v5h-5a2 2 0 10-4 0H5v-5a2 2 0 100-4z" fill="currentColor"/>',
+  shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" fill="currentColor"/>',
+  gear: '<circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l3 3M16 16l3 3M19 5l-3 3M8 16l-3 3" stroke="currentColor" stroke-width="2.4"/>',
+};
+
+function cap(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
+function escHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+}
+function timePresetOf(t: TimeKey): { min: number; inc: number } {
+  return t === 'none' ? { min: 10, inc: 0 } : { min: TIME_PRESETS[t].min, inc: TIME_PRESETS[t].inc };
+}
+function timeLabel(t: TimeKey): string {
+  return t === 'none' ? 'Untimed' : `${TIME_PRESETS[t].label} ${TIME_PRESETS[t].note}`;
+}
+function hasSupabase(): boolean {
+  return !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
+}
+function navHtml(): string {
+  return MENU_ITEMS.map((item) => {
+    const disabled = !!item.disabled;
+    return `<button type="button" role="tab" id="tab-${item.id}" data-tab="${item.id}" aria-controls="menu-panel" aria-selected="${menuTab === item.id}" tabindex="${menuTab === item.id ? '0' : '-1'}"${disabled ? ' disabled aria-disabled="true"' : ''}>
+      <svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[item.icon]}</svg>
+      <span class="tab-label">${item.label}</span>${disabled ? '<span class="soon">Soon</span>' : ''}
+    </button>`;
+  }).join('');
+}
+function chipButton(set: string, val: string, label: string, pressed: boolean, sub?: string): string {
+  return `<button class="chip" type="button" data-set="${set}" data-val="${val}" aria-pressed="${pressed}">${label}${sub ? `<small>${sub}</small>` : ''}</button>`;
+}
+function timeChips(set: 'time' | 'localTime', current: TimeKey): string {
+  return TIME_ORDER.map((t) => chipButton(
+    set, t,
+    t === 'none' ? 'Untimed' : TIME_PRESETS[t].label,
+    current === t,
+    t === 'none' ? 'Until mate' : TIME_PRESETS[t].note,
+  )).join('');
+}
+function roomListHtml(): string {
+  if (!hasSupabase()) return '<div class="room-empty">Cross-device play needs Supabase keys. Use two tabs on this device to test.</div>';
+  if (menuRoomsStatus === 'idle' || menuRoomsStatus === 'loading') return '<div class="room-empty">Searching the realm…</div>';
+  if (menuRoomsStatus === 'error') return `<div class="room-empty">Could not load rooms: ${escHtml(menuRoomsError)}</div>`;
+  if (!menuRooms.length) return '<div class="room-empty">No open rooms. Create one!</div>';
+  return `<div class="room-list">${menuRooms.map((r) => `<div class="room"><span class="room-code">${escHtml(r.code)}</span><button class="chip" type="button" data-act="join-room" data-code="${escHtml(r.code)}">Join</button></div>`).join('')}</div>`;
+}
+function menuPanelHtml(): string {
+  if (menuTab === 'play') {
+    return `<h2>Choose your battle</h2>
+      <div class="group">
+        <h3>Vs computer</h3>
+        <p>Challenge the royal strategist.</p>
+        <div class="chips">${LEVEL_ORDER.map((l) => chipButton('level', l, MENU_LEVELS[l].label, menuLevel === l)).join('')}</div>
+        <div class="hint">${MENU_LEVELS[menuLevel].hint}</div>
+      </div>
+      <div class="group">
+        <h3>Timed match</h3>
+        <p>Race against time to claim victory.</p>
+        <div class="chips">${timeChips('time', menuTime)}</div>
+      </div>
+      <div class="group">
+        <h3>Play as</h3>
+        <p>Choose your side of the board.</p>
+        <div class="chips">${SIDE_ORDER.map((s) => chipButton('side', s, cap(s), menuSide === s)).join('')}</div>
+      </div>`;
+  }
+  if (menuTab === 'online') {
+    return `<h2>Online match</h2>
+      <div class="group">
+        <h3>Quick match</h3>
+        <p>Face challengers across the kingdom.</p>
+        <div class="chips">
+          <button class="chip start" type="button" data-act="find">Find match</button>
+          <button class="chip" type="button" data-act="create">Create room</button>
+        </div>
+        <div class="hint">10 minutes · no increment · both players must be connected</div>
+      </div>
+      <div class="group">
+        <h3>Join a room</h3>
+        <p>Enter the code a friend shared.</p>
+        <div class="field">
+          <input id="menu-room-code" maxlength="6" value="${escHtml(menuRoomCode)}" placeholder="ABC123" aria-label="Room code" autocomplete="off" spellcheck="false">
+          <button class="chip" type="button" data-act="join">Join</button>
+        </div>
+      </div>
+      <div class="group">
+        <h3>Open rooms</h3>
+        <p>Rooms waiting for an opponent.</p>
+        <div id="menu-room-list">${roomListHtml()}</div>
+        ${hasSupabase() ? '<div class="chips"><button class="chip" type="button" data-act="refresh">Refresh</button></div>' : ''}
+      </div>`;
+  }
+  if (menuTab === 'local') {
+    return `<h2>Local duel</h2>
+      <div class="group">
+        <h3>Same screen</h3>
+        <p>Challenge a friend beside you.</p>
+        <div class="chips"><button class="chip start" type="button" data-act="start-local">Start local game</button></div>
+        <div class="hint">Pass the device after each move.</div>
+      </div>
+      <div class="group">
+        <h3>Time control</h3>
+        <p>Both armies share this clock.</p>
+        <div class="chips">${timeChips('localTime', localTime)}</div>
+      </div>`;
+  }
+  if (menuTab === 'skins') {
+    const swatch = (s: string) => `#${SKINS[s].effectColor.toString(16).padStart(6, '0')}`;
+    const chips = (key: 'skin' | 'board', current: string) => SKIN_NAMES.map((s) =>
+      `<button class="chip" type="button" data-set="${key}" data-val="${s}" aria-pressed="${current === s}"><span class="swatch" style="background:${swatch(s)}"></span>${cap(s)}</button>`).join('');
+    return `<h2>Skins &amp; boards</h2>
+      <div class="group">
+        <h3>Piece skin</h3>
+        <p>How your army looks.</p>
+        <div class="chips">${chips('skin', pieceSkin)}</div>
+      </div>
+      <div class="group">
+        <h3>Battlefield</h3>
+        <p>Where the fight happens.</p>
+        <div class="chips">${chips('board', boardSkin)}</div>
+      </div>
+      <div class="hint">Drag the preview to inspect your army.</div>`;
+  }
+  const pixel = ctx.graphicsMode() === 'pixel';
+  return `<h2>Settings</h2>
+    <label class="row">Sound effects<input type="checkbox" data-check="sound" ${volumeOn ? 'checked' : ''}></label>
+    <div class="group" style="margin-top:16px">
+      <h3>Graphics</h3>
+      <p>Rendering style.</p>
+      <div class="chips">
+        ${chipButton('gfx', 'smooth', 'Smooth', !pixel)}
+        ${chipButton('gfx', 'pixel', 'Pixelated', pixel)}
+      </div>
+      ${pixel ? `<div class="field pixel-fields">
+        <label>W <input id="menu-pw" type="number" min="240" max="1920" value="${settings.width}"></label>
+        <label>H <input id="menu-ph" type="number" min="180" max="1080" value="${settings.height}"></label>
+      </div>` : ''}
+    </div>
+    <div class="group">
+      <h3>Cinematics</h3>
+      <p>Capture animations.</p>
+      <div class="chips">
+        ${chipButton('cine', 'on', 'Full', cinematicsMode === 'on')}
+        ${chipButton('cine', 'short', 'Short', cinematicsMode === 'short')}
+        ${chipButton('cine', 'off', 'Off', cinematicsMode === 'off')}
+      </div>
+    </div>
+    <div class="chips"><button class="chip" type="button" data-act="reset-settings">Reset defaults</button></div>`;
+}
+function menuSummary(): string {
+  if (menuTab === 'play') return `Vs computer · ${MENU_LEVELS[menuLevel].label} · ${timeLabel(menuTime)} · ${cap(menuSide)}`;
+  if (menuTab === 'online') return 'Online · 10 min · no increment';
+  if (menuTab === 'local') return `Local duel · ${timeLabel(localTime)}`;
+  if (menuTab === 'skins') return `${cap(pieceSkin)} pieces · ${cap(boardSkin)} board`;
+  return `${ctx.graphicsMode() === 'pixel' ? 'Pixelated' : 'Smooth'} · Cinematics ${cinematicsMode} · Sound ${volumeOn ? 'on' : 'off'}`;
+}
+function ctaLabel(): string {
+  if (menuTab === 'online') return 'Create room';
+  if (menuTab === 'local') return 'Begin local duel';
+  return 'Begin your quest';
+}
+function updateMenuChrome(): void {
+  if (!menuRoot) return;
+  const begin = menuRoot.querySelector('#menu-begin') as HTMLButtonElement | null;
+  const summary = menuRoot.querySelector('#menu-summary') as HTMLElement | null;
+  if (begin) begin.textContent = ctaLabel();
+  if (summary) summary.textContent = menuSummary();
+}
+function renderMenu(focusSel?: string): void {
+  if (!menuRoot || !document.body.contains(menuRoot)) return;
+  const panel = menuRoot.querySelector('#menu-panel') as HTMLElement | null;
+  const preview = menuRoot.querySelector('#menu-preview') as HTMLElement | null;
+  if (!panel || !preview) return;
+
+  menuRoot.querySelectorAll<HTMLButtonElement>('#menu-nav [data-tab]').forEach((b) => {
+    const active = b.dataset.tab === menuTab;
+    b.setAttribute('aria-selected', String(active));
+    b.tabIndex = active ? 0 : -1;
+  });
+  panel.setAttribute('aria-labelledby', `tab-${menuTab}`);
+
+  panel.innerHTML = menuPanelHtml();
+  panel.classList.remove('panel-in');
+  void panel.offsetWidth;
+  panel.classList.add('panel-in');
+  updateMenuChrome();
+
+  const showPreview = menuTab === 'skins';
+  preview.hidden = !showPreview;
+  if (showPreview) ensureSkinPreview();
+  else disposeSkinPreview();
+
+  if (focusSel) {
+    const el = menuRoot.querySelector(focusSel) as HTMLElement | null;
+    el?.focus();
+  }
+}
+function selectMenuTab(tab: MenuTab): void {
+  const item = MENU_ITEMS.find((i) => i.id === tab);
+  if (!item || item.disabled) return;
+  SFX.click();
+  menuTab = tab;
+  renderMenu();
+  if (tab === 'online' && menuRoomsStatus !== 'loading') void loadMenuRooms();
+}
+function applyMenuSetting(key: string, val: string): void {
+  switch (key) {
+    case 'level': menuLevel = val as MenuLevel; break;
+    case 'time': menuTime = val as TimeKey; break;
+    case 'side': menuSide = val as SideChoice; break;
+    case 'localTime': localTime = val as TimeKey; break;
+    case 'skin':
+      pieceSkin = val;
+      localStorage.setItem('ptk_pieceSkin', pieceSkin);
+      break;
+    case 'board':
+      boardSkin = val;
+      localStorage.setItem('ptk_boardSkin', boardSkin);
+      break;
+    case 'gfx':
+      ctx.applyGraphicsMode(val as 'smooth' | 'pixel');
+      saveSettings(settings);
+      showToast(val === 'pixel' ? 'Graphics: pixelated' : 'Graphics: smooth');
+      break;
+    case 'cine':
+      cinematicsMode = val as 'on' | 'short' | 'off';
+      localStorage.setItem('ptk_cine', cinematicsMode);
+      showToast(`Cinematics: ${val}`);
+      break;
+    default: return;
+  }
+  SFX.click();
+  renderMenu(`[data-set="${key}"][data-val="${val}"]`);
+}
+function onMenuClick(e: MouseEvent): void {
+  const el = (e.target as HTMLElement).closest('[data-tab], [data-set], [data-act]') as HTMLElement | null;
+  if (!el) return;
+  if (el instanceof HTMLButtonElement && el.disabled) return;
+
+  const tab = el.dataset.tab;
+  if (tab) { selectMenuTab(tab as MenuTab); return; }
+  if (el.dataset.set) { applyMenuSetting(el.dataset.set, el.dataset.val || ''); return; }
+
+  switch (el.dataset.act) {
+    case 'begin': beginFromMenu(); break;
+    case 'start-local': startLocalGame(); break;
+    case 'create': void createRoomAndStart(); break;
+    case 'find': void findMatch(); break;
+    case 'join': joinFromCode(); break;
+    case 'join-room': void joinRoomAndStart(el.dataset.code || ''); break;
+    case 'refresh': void loadMenuRooms(); break;
+    case 'reset-settings': resetMenuSettings(); break;
+    default: break;
+  }
+}
+function onMenuChange(e: Event): void {
+  const t = e.target as HTMLInputElement;
+  if (t.dataset.check === 'sound') {
+    volumeOn = t.checked;
+    localStorage.setItem('ptk_vol', volumeOn ? '1' : '0');
+    SFX.setMuted(!volumeOn);
+    showToast(volumeOn ? 'Sound on' : 'Sound off');
+    updateMenuChrome();
+    return;
+  }
+  if (t.id === 'menu-pw' || t.id === 'menu-ph') {
+    const pw = menuRoot?.querySelector('#menu-pw') as HTMLInputElement | null;
+    const ph = menuRoot?.querySelector('#menu-ph') as HTMLInputElement | null;
+    settings.width = Math.min(1920, Math.max(240, parseInt(pw?.value || '640', 10) || 640));
+    settings.height = Math.min(1080, Math.max(180, parseInt(ph?.value || '360', 10) || 360));
+    saveSettings(settings);
+    if (ctx.graphicsMode() === 'pixel') ctx.applyPixelSize(settings.width, settings.height);
+    if (pw) pw.value = String(settings.width);
+    if (ph) ph.value = String(settings.height);
+    showToast(`Pixel size: ${settings.width} × ${settings.height}`);
+  }
+}
+function onMenuInput(e: Event): void {
+  const t = e.target as HTMLInputElement;
+  if (t.id === 'menu-room-code') {
+    const cleaned = t.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+    menuRoomCode = cleaned;
+    if (t.value !== cleaned) t.value = cleaned;
+  }
+}
+function onMenuKeydown(e: KeyboardEvent): void {
+  if (!(e.target as HTMLElement).closest('#menu-nav')) return;
+  if (!['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft', 'Home', 'End'].includes(e.key)) return;
+  const buttons = Array.from(menuRoot?.querySelectorAll<HTMLButtonElement>('#menu-nav button[role="tab"]:not(:disabled)') || []);
+  const idx = buttons.indexOf(document.activeElement as HTMLButtonElement);
+  if (idx < 0) return;
+  e.preventDefault();
+  let next = idx;
+  if (e.key === 'Home') next = 0;
+  else if (e.key === 'End') next = buttons.length - 1;
+  else {
+    const dir = (e.key === 'ArrowDown' || e.key === 'ArrowRight') ? 1 : -1;
+    next = (idx + dir + buttons.length) % buttons.length;
+  }
+  buttons[next].focus();
+  selectMenuTab(buttons[next].dataset.tab as MenuTab);
+}
+function updateRoomList(): void {
+  const list = menuRoot?.querySelector('#menu-room-list');
+  if (list) list.innerHTML = roomListHtml();
+}
+async function loadMenuRooms(): Promise<void> {
+  if (!hasSupabase()) { menuRoomsStatus = 'ready'; menuRooms = []; updateRoomList(); return; }
+  menuRoomsStatus = 'loading';
+  menuRoomsError = '';
+  updateRoomList();
+  adapter = createAdapter();
+  try {
+    menuRooms = await adapter.listOpenRooms();
+    menuRoomsStatus = 'ready';
+  } catch (e) {
+    menuRoomsStatus = 'error';
+    menuRoomsError = (e as Error).message || 'unknown error';
+  }
+  updateRoomList();
+}
+async function findMatch(): Promise<void> {
+  SFX.click();
+  showToast('Searching for an opponent…');
+  await loadMenuRooms();
+  if (menuTab !== 'online') return;
+  if (menuRooms.length) { await joinRoomAndStart(menuRooms[0].code); return; }
+  await createRoomAndStart();
+}
+function joinFromCode(): void {
+  const input = menuRoot?.querySelector('#menu-room-code') as HTMLInputElement | null;
+  const code = (input?.value || menuRoomCode).trim().toUpperCase();
+  if (code.length < 4) { showToast('Enter a room code first.'); input?.focus(); return; }
+  void joinRoomAndStart(code);
+}
+async function joinRoomAndStart(code: string): Promise<void> {
+  if (!code) return;
+  SFX.click();
+  showToast(`Joining room ${code}…`);
+  adapter = createAdapter();
+  try {
+    await adapter.joinRoom(code.toUpperCase());
+  } catch (e) {
+    showToast('Could not join room: ' + ((e as Error).message || 'unknown error'), 5000);
+    return;
+  }
+  menuRoomCode = '';
+  gameMode = 'online';
+  clockEnabled = true;
+  playerColor = 'b';
+  pendingMoves = [];
+  setupOnlineHandlers();
+  startGame();
+}
+async function createRoomAndStart(): Promise<void> {
+  SFX.click();
+  adapter = createAdapter();
+  pendingMoves = [];
+  let code = '';
+  try {
+    code = await adapter.createRoom();
+  } catch (e) {
+    showToast('Could not create room: ' + ((e as Error).message || 'unknown error'), 5000);
+    return;
+  }
+  const wait = overlay(`
+    <div class="menu-card">
+      <div class="title">WAITING</div>
+      <div class="wait-code">ROOM CODE <strong>${escHtml(code)}</strong></div>
+      <div class="wait-note">Share this code. The game starts when your opponent joins.</div>
+      <button data-act="cancel">CANCEL</button>
+    </div>`);
+  gameMode = 'online';
+  clockEnabled = true;
+  playerColor = 'w';
+  setupOnlineHandlers();
+  let began = false;
+  adapter.onOpponent((present) => {
+    if (!present || began) return;
+    began = true;
+    clearOverlays();
+    startGame();
+  });
+  wait.querySelector('[data-act="cancel"]')?.addEventListener('click', () => {
+    SFX.click();
+    adapter?.disconnect();
+    adapter = null;
+    clearOverlays();
+    menuTab = 'online';
+    showMenu();
+    void loadMenuRooms();
+  });
+}
+function beginFromMenu(): void {
+  SFX.click();
+  if (menuTab === 'online') { void createRoomAndStart(); return; }
+  if (menuTab === 'local') { startLocalGame(); return; }
+  gameMode = 'ai';
+  clockEnabled = menuTime !== 'none';
+  timedPreset = timePresetOf(menuTime);
+  difficulty = (menuLevel === 'expert' ? 'hard' : menuLevel) as Difficulty;
+  playerColor = menuSide === 'black' ? 'b' : menuSide === 'white' ? 'w' : (Math.random() < 0.5 ? 'w' : 'b');
+  startGame();
+}
+function startLocalGame(): void {
+  SFX.click();
+  gameMode = localTime === 'none' ? 'classic' : 'timed';
+  clockEnabled = localTime !== 'none';
+  timedPreset = timePresetOf(localTime);
+  playerColor = 'w';
+  startGame();
+}
+function resetMenuSettings(): void {
+  SFX.click();
+  settings = { width: 640, height: 360, posterize: false, outline: false };
+  saveSettings(settings);
+  ctx.applyGraphicsMode('smooth');
+  cinematicsMode = 'on';
+  localStorage.setItem('ptk_cine', 'on');
+  volumeOn = true;
+  localStorage.setItem('ptk_vol', '1');
+  SFX.setMuted(false);
+  showToast('Settings reset to defaults.');
+  renderMenu();
+}
 function showMenu() {
   screen = 'menu';
   paused = false;
@@ -115,329 +586,50 @@ function showMenu() {
   if (clock) { clock.stop(); clock = null; }
   if (ai) { ai.terminate(); ai = null; }
   if (hudInterval) { clearInterval(hudInterval); hudInterval = null; }
+  teardownOnline();
   document.querySelectorAll('.game-menu-btn, .game-cam-btn').forEach((e) => e.remove());
   document.getElementById('gamehud')?.remove();
+
   const o = overlay(`
     <div class="main-menu">
-      <div class="menu-layout">
-        <div class="left-col">
-          <div class="royal-banner">
-            <div class="title">PROTECT<br/>THE KING</div>
-            <div class="subtitle">A ROYAL CHESS BATTLE</div>
+      <div class="stage">
+        <section class="left">
+          <div class="logo">
+            <h1>Protect<br>the King</h1>
+            <small>A ROYAL CHESS BATTLE</small>
           </div>
-          <div class="nav-stack">
-            <button class="med-btn" data-act="mode"><span class="icon">&#9812;</span> PLAY CHESS</button>
-            <button class="med-btn" data-act="online"><span class="icon">&#9876;</span> ONLINE MULTIPLAYER</button>
-            <button class="med-btn" data-act="local"><span class="icon">&#9817;</span> LOCAL MULTIPLAYER</button>
-            <button class="med-btn disabled" title="Coming soon"><span class="icon">&#9813;</span> PUZZLES &amp; CHALLENGES</button>
-            <button class="med-btn" data-act="skins"><span class="icon">&#9815;</span> SKINS &amp; BOARDS</button>
-            <button class="med-btn" data-act="settings"><span class="icon">&#9881;</span> SETTINGS</button>
+          <nav id="menu-nav" role="tablist" aria-label="Main menu">${navHtml()}</nav>
+        </section>
+        <section class="preview-col" id="menu-preview" hidden>
+          <div class="preview-card">
+            <div class="preview-title">ARMY PREVIEW</div>
+            <canvas id="skinpreview" width="420" height="320"></canvas>
+            <div class="preview-label" id="skinlabel"></div>
           </div>
-        </div>
-        <div class="center-col">
-          <button class="begin-quest" data-act="begin">BEGIN YOUR QUEST</button>
-        </div>
-        <div class="right-col">
-          <div class="quick-panel">
-            <div class="panel-title">CHOOSE YOUR BATTLE</div>
-
-            <div class="mode-section">
-              <div class="mode-name">VS COMPUTER</div>
-              <div class="mode-desc">Challenge the royal strategist.</div>
-              <div class="mode-options">
-                <button class="opt-btn" data-act="ai" data-d="easy">EASY</button>
-                <button class="opt-btn" data-act="ai" data-d="medium">MEDIUM</button>
-                <button class="opt-btn" data-act="ai" data-d="hard">HARD</button>
-                <button class="opt-btn" data-act="ai" data-d="expert">EXPERT</button>
-              </div>
-            </div>
-
-            <div class="mode-section">
-              <div class="mode-name">TIMED MATCH</div>
-              <div class="mode-desc">Race against time to claim victory.</div>
-              <div class="mode-options">
-                <button class="opt-btn action" data-act="timed" data-t="1+0">BULLET</button>
-                <button class="opt-btn action" data-act="timed" data-t="3+2">BLITZ</button>
-                <button class="opt-btn action" data-act="timed" data-t="10+0">RAPID</button>
-                <button class="opt-btn action" data-act="timed" data-t="30+0">CLASSICAL</button>
-              </div>
-            </div>
-
-            <div class="mode-section">
-              <div class="mode-name">LOCAL DUEL</div>
-              <div class="mode-desc">Challenge a friend beside you.</div>
-              <div class="mode-options">
-                <button class="opt-btn action" data-act="local">START LOCAL GAME</button>
-              </div>
-            </div>
-
-            <div class="mode-section">
-              <div class="mode-name">ONLINE MATCH</div>
-              <div class="mode-desc">Face challengers across the kingdom.</div>
-              <div class="mode-options">
-                <button class="opt-btn action" data-act="online-create">FIND MATCH</button>
-                <button class="opt-btn action" data-act="online-join">CREATE ROOM</button>
-              </div>
-            </div>
-          </div>
+        </section>
+        <section class="panel" id="menu-panel" role="tabpanel" aria-live="polite"></section>
+        <div class="cta">
+          <button id="menu-begin" class="cta-btn" type="button" data-act="begin">Begin your quest</button>
+          <div class="summary" id="menu-summary"></div>
         </div>
       </div>
     </div>`);
 
-  o.querySelectorAll('button').forEach((b) => {
-    const el = b as HTMLElement;
-    const act = el.dataset.act;
-    if (!act || act === 'ai' || act === 'timed') return;
-    el.addEventListener('click', () => {
-      SFX.click();
-      if (act === 'mode' || act === 'begin') showModeSelect();
-      else if (act === 'online' || act === 'online-create' || act === 'online-join') showOnlineMenu();
-      else if (act === 'local') { gameMode = 'local'; playerColor = 'w'; startGame(); }
-      else if (act === 'skins') showSkinSelect();
-      else if (act === 'settings') showSettings();
-    });
-  });
-  o.querySelectorAll('[data-act="ai"]').forEach((b) => {
-    b.addEventListener('click', () => {
-      SFX.click();
-      const d = (b as HTMLElement).dataset.d as string;
-      const diff = d === 'expert' ? 'hard' : d;
-      difficulty = diff as any;
-      gameMode = 'ai';
-      playerColor = 'w';
-      startGame();
-    });
-  });
-  o.querySelectorAll('[data-act="timed"]').forEach((b) => {
-    b.addEventListener('click', () => {
-      SFX.click();
-      const t = (b as HTMLElement).dataset.t as string;
-      // const [m, inc] = t.split('+');
-      if (t === '1+0') timedPreset = { min: 1, inc: 0 };
-      else if (t === '3+2') timedPreset = { min: 3, inc: 2 };
-      else if (t === '10+0') timedPreset = { min: 10, inc: 0 };
-      else if (t === '30+0') timedPreset = { min: 30, inc: 0 };
-      gameMode = 'timed';
-      playerColor = 'w';
-      startGame();
-    });
-  });
-}
-
-function showModeSelect() {
-  screen = 'mode';
-  const o = overlay(`
-    <div class="menu-card">
-      <div class="title">SELECT MODE</div>
-      <div style="display:flex;flex-direction:column;gap:6px;">
-        <button data-mode="ai">VS COMPUTER</button>
-        <button data-mode="classic">CLASSIC (UNTIMED)</button>
-        <button data-mode="timed">TIMED</button>
-        <button data-mode="local">LOCAL PASS-AND-PLAY</button>
-        <button data-mode="online">ONLINE (ROOM CODE)</button>
-        <button data-act="back">BACK</button>
-      </div>
-    </div>`);
-  o.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
-    SFX.click();
-    const mode = (b as HTMLElement).dataset.mode;
-    const act = (b as HTMLElement).dataset.act;
-    if (act === 'back') { showMenu(); return; }
-    if (mode === 'ai') { showAIDifficulty(); return; }
-    if (mode === 'timed') { showTimedSelect(); return; }
-    if (mode === 'online') { showOnlineMenu(); return; }
-    gameMode = mode as any;
-    if (mode === 'local') playerColor = 'w';
-    startGame();
-  }));
-}
-
-function showAIDifficulty() {
-  const o = overlay(`
-    <div class="menu-card">
-      <div class="title">DIFFICULTY</div>
-      <div style="display:flex;flex-direction:column;gap:6px;">
-        <button data-d="easy">EASY</button>
-        <button data-d="medium">MEDIUM</button>
-        <button data-d="hard">HARD</button>
-        <button data-act="back">BACK</button>
-      </div>
-    </div>`);
-  o.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
-    SFX.click();
-    const d = (b as HTMLElement).dataset.d;
-    const act = (b as HTMLElement).dataset.act;
-    if (act === 'back') { showModeSelect(); return; }
-    difficulty = d as Difficulty;
-    gameMode = 'ai';
-    playerColor = 'w';
-    startGame();
-  }));
-}
-
-function showTimedSelect() {
-  const o = overlay(`
-    <div class="menu-card">
-      <div class="title">TIMED</div>
-      <div style="display:flex;flex-direction:column;gap:6px;">
-        <button data-t="3+2">BLITZ 3+2</button>
-        <button data-t="10+0">RAPID 10+0</button>
-        <button data-t="custom">CUSTOM</button>
-        <button data-act="back">BACK</button>
-      </div>
-    </div>`);
-  o.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
-    SFX.click();
-    const t = (b as HTMLElement).dataset.t;
-    const act = (b as HTMLElement).dataset.act;
-    if (act === 'back') { showModeSelect(); return; }
-    if (t === '3+2') timedPreset = { min: 3, inc: 2 };
-    else if (t === '10+0') timedPreset = { min: 10, inc: 0 };
-    else {
-      const m = prompt('Minutes:', '5'); const i = prompt('Increment (sec):', '3');
-      timedPreset = { min: parseInt(m || '5'), inc: parseInt(i || '0') };
-    }
-    gameMode = 'timed';
-    playerColor = 'w';
-    startGame();
-  }));
-}
-
-function showOnlineMenu() {
-  screen = 'online';
-  const isSupa = !!(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
-  const o = overlay(`
-    <div class="main-menu">
-      <div class="menu-layout" style="grid-template-columns: minmax(300px, 420px) 1fr; max-width:1000px; margin:0 auto;">
-        <div class="left-col" style="justify-content:center;">
-          <div class="royal-banner">
-            <div class="title">ONLINE</div>
-            <div class="subtitle">MULTIPLAYER</div>
-          </div>
-          <div class="quick-panel" style="margin-top:12px;">
-            <div class="mode-section">
-              <div class="mode-name">CREATE ROOM</div>
-              <div class="mode-desc">Host a new game and wait for a challenger.</div>
-              <button class="med-btn" data-act="create" style="justify-content:center;">CREATE ROOM</button>
-            </div>
-            <div class="mode-section" style="margin-top:14px;">
-              <div class="mode-name">JOIN BY CODE</div>
-              <div class="mode-desc">Enter a 6-character room code.</div>
-              <input id="joincode" placeholder="6-CHAR CODE" style="padding:8px;font-family:monospace;text-transform:uppercase;text-align:center;width:100%;margin-bottom:8px;" />
-              <button class="med-btn" data-act="join" style="justify-content:center;">JOIN ROOM</button>
-            </div>
-            ${isSupa ? `
-            <div class="mode-section" style="margin-top:14px;">
-              <div class="mode-name">OPEN ROOMS</div>
-              <div class="mode-desc">Rooms waiting for an opponent.</div>
-              <div id="roomlist" style="max-height:180px;overflow:auto;margin-bottom:8px;"></div>
-              <button class="med-btn" data-act="refresh" style="justify-content:center;">REFRESH LIST</button>
-            </div>` : ''}
-            <div style="margin-top:14px;">
-              <button class="med-btn" data-act="back" style="justify-content:center;">BACK</button>
-            </div>
-          </div>
-        </div>
-        <div class="right-col" style="align-items:stretch;justify-content:center;">
-          <div class="quick-panel" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;">
-            <div class="panel-title">HOW IT WORKS</div>
-            <div style="font-family:'Jersey 10',monospace;font-size:1rem;color:#F2E9D5;text-align:center;line-height:1.6;max-width:360px;">
-              ${isSupa
-                ? 'Create a room and share the code, or pick an open room from the list. The game starts only when both players are connected.'
-                : 'Open two browser tabs on this device. Create a room in one, join with the code in the other. (Cross-device play needs Supabase env vars.)'}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>`);
-
-  async function loadRooms() {
-    if (!isSupa) return;
-    const list = o.querySelector('#roomlist') as HTMLDivElement;
-    if (!list) return;
-    list.innerHTML = '<div style="opacity:0.6;font-size:0.85rem;">Loading...</div>';
-    adapter = createAdapter();
-    const rooms = await adapter.listOpenRooms();
-    if (!rooms.length) { list.innerHTML = '<div style="opacity:0.6;font-size:0.85rem;">No open rooms.</div>'; return; }
-    list.innerHTML = rooms.map((r) => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;margin:4px 0;background:rgba(28,27,25,0.6);border:1px solid rgba(200,155,66,0.4);border-radius:4px;">
-        <span style="font-family:monospace;letter-spacing:2px;">${r.code}</span>
-        <button class="opt-btn" data-join="${r.code}" style="padding:4px 10px;">JOIN</button>
-      </div>`).join('');
-    list.querySelectorAll('[data-join]').forEach((b) => {
-      b.addEventListener('click', async () => {
-        SFX.click();
-        const code = (b as HTMLElement).dataset.join as string;
-        await joinRoomAndStart(code);
-      });
-    });
-  }
-
-  async function joinRoomAndStart(code: string) {
-    adapter = createAdapter();
-    try {
-      await adapter.joinRoom(code);
-    } catch (e) {
-      showAlert('Could not join room: ' + (e as Error).message);
-      return;
-    }
-    gameMode = 'online';
-    playerColor = 'b';
-    pendingMoves = [];
-    setupOnlineHandlers();
-    startGame();
-  }
-
-  async function createRoomAndStart() {
-    adapter = createAdapter();
-    pendingMoves = [];
-    const code = await adapter.createRoom();
-    // Show waiting state; do NOT start game yet.
-    const wait = overlay(`
-      <div class="menu-card">
-        <div class="title">WAITING</div>
-        <div style="margin:14px 0;font-size:1.1rem;color:#F2E9D5;text-align:center;">Room code: <span style="color:#C89B42;letter-spacing:3px;">${code}</span></div>
-        <div style="margin-bottom:14px;font-size:0.9rem;opacity:0.8;text-align:center;">Share this code. Game starts when an opponent joins.</div>
-        <button data-act="cancel">CANCEL</button>
-      </div>`);
-    gameMode = 'online';
-    playerColor = 'w';
-    setupOnlineHandlers();
-    let began = false;
-    adapter.onOpponent((present) => {
-      // Fired by the rooms UPDATE or by the joiner's broadcast handshake.
-      if (!present || began) return;
-      began = true;
-      clearOverlays();
-      startGame();
-    });
-    wait.querySelector('[data-act="cancel"]')?.addEventListener('click', () => {
-      SFX.click();
-      adapter?.disconnect();
-      adapter = null;
-      clearOverlays();
-      showOnlineMenu();
-    });
-  }
-
-  o.querySelector('[data-act="create"]')?.addEventListener('click', () => { SFX.click(); createRoomAndStart(); });
-  o.querySelector('[data-act="join"]')?.addEventListener('click', async () => {
-    SFX.click();
-    const code = (o.querySelector('#joincode') as HTMLInputElement).value.trim().toUpperCase();
-    if (code.length < 4) { showAlert('Enter a code'); return; }
-    await joinRoomAndStart(code);
-  });
-  o.querySelector('[data-act="refresh"]')?.addEventListener('click', () => { SFX.click(); loadRooms(); });
-  o.querySelector('[data-act="back"]')?.addEventListener('click', () => { SFX.click(); showModeSelect(); });
-
-  if (isSupa) loadRooms();
+  menuRoot = o;
+  skinPreviewCanvas = o.querySelector('#skinpreview') as HTMLCanvasElement;
+  skinPreviewLabel = o.querySelector('#skinlabel') as HTMLDivElement;
+  o.addEventListener('click', onMenuClick);
+  o.addEventListener('change', onMenuChange);
+  o.addEventListener('input', onMenuInput);
+  o.addEventListener('keydown', onMenuKeydown);
+  renderMenu();
+  if (menuTab === 'online') void loadMenuRooms();
 }
 
 function setupOnlineHandlers() {
   if (!adapter) return;
   adapter.onMove((m: NetMove) => {
-    if (!game || !boardView) { pendingMoves.push(m); console.log('[main] game not ready, queued move', m.from, m.to); return; }
-    console.log('[main] received move', m.from, m.to, 'turn=', game.turn());
+    if (!game || !boardView) { pendingMoves.push(m); return; }
     const mv = game.move(m.from, m.to, m.promotion);
     if (mv) {
       // Adopt the sender's clock snapshot BEFORE switchTo adds this move's increment.
@@ -468,9 +660,8 @@ function setupOnlineHandlers() {
     clock.whiteMs = w;
     clock.blackMs = b;
   });
-  adapter.onOpponent((present: boolean) => {
-    // could update UI; for now log
-    if (present) console.log('Opponent joined');
+  adapter.onOpponent((_present: boolean) => {
+    // Opponent presence is surfaced through the join handshake (see createRoomAndStart).
   });
   adapter.onResign(() => { endGame('Opponent resigned. You win!'); });
   adapter.onDrawOffer(() => { showConfirm('Draw offered. Accept?', () => endGame('Draw agreed.')); });
@@ -478,206 +669,72 @@ function setupOnlineHandlers() {
 
 let skinPreviewRenderer: THREE.WebGLRenderer | null = null;
 let skinPreviewAnimId = 0;
+let skinPreviewCanvas: HTMLCanvasElement | null = null;
+let skinPreviewLabel: HTMLDivElement | null = null;
+let skinPreviewKey = '';
+let skinPreviewToken = 0;
 
-function stopSkinPreview() {
+/** Stops the preview loop and releases its renderer. Also aborts any in-flight build. */
+function disposeSkinPreview(): void {
+  skinPreviewToken++;
+  skinPreviewKey = '';
   if (skinPreviewAnimId) { cancelAnimationFrame(skinPreviewAnimId); skinPreviewAnimId = 0; }
   if (skinPreviewRenderer) { skinPreviewRenderer.dispose(); skinPreviewRenderer = null; }
 }
 
-function showSkinSelect() {
-  screen = 'skins';
-  stopSkinPreview();
-  const o = overlay(`
-    <div class="main-menu">
-      <div class="menu-layout" style="grid-template-columns: minmax(260px, 340px) 1fr; max-width:1100px; margin:0 auto;">
-        <div class="left-col" style="justify-content:center;">
-          <div class="royal-banner">
-            <div class="title">SKINS &amp; BOARDS</div>
-            <div class="subtitle">CHOOSE YOUR ARMY</div>
-          </div>
-          <div class="quick-panel" style="margin-top:12px;">
-            <div class="mode-section">
-              <div class="mode-name">PIECE SKIN</div>
-              <div class="mode-desc">Select your army's appearance.</div>
-              <div class="mode-options" style="flex-direction:column;gap:8px;">
-                ${SKIN_NAMES.map((s) => `<button class="opt-btn ${s === pieceSkin ? 'selected' : ''}" data-skin="piece" data-val="${s}" style="text-align:left;">${s.toUpperCase()}</button>`).join('')}
-              </div>
-            </div>
-            <div class="mode-section" style="margin-top:14px;">
-              <div class="mode-name">BOARD SKIN</div>
-              <div class="mode-desc">Select the battlefield.</div>
-              <div class="mode-options" style="flex-direction:column;gap:8px;">
-                ${SKIN_NAMES.map((s) => `<button class="opt-btn ${s === boardSkin ? 'selected' : ''}" data-skin="board" data-val="${s}" style="text-align:left;">${s.toUpperCase()}</button>`).join('')}
-              </div>
-            </div>
-            <div style="margin-top:14px;">
-              <button class="med-btn" data-act="back" style="justify-content:center;">BACK</button>
-            </div>
-          </div>
-        </div>
-        <div class="right-col" style="align-items:stretch;justify-content:center;">
-          <div class="quick-panel" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;">
-            <div class="panel-title">PREVIEW</div>
-            <canvas id="skinpreview" width="420" height="320" style="border:3px solid var(--c-gold,#C89B42);border-radius:6px;background:#1a1a2e;max-width:100%;"></canvas>
-            <div id="skinlabel" style="margin-top:10px;font-family:'Jersey 10',monospace;font-size:1.1rem;color:#F2E9D5;letter-spacing:2px;">${pieceSkin.toUpperCase()} / ${boardSkin.toUpperCase()}</div>
-          </div>
-        </div>
-      </div>
-    </div>`);
-
-  const previewCanvas = o.querySelector('#skinpreview') as HTMLCanvasElement;
-  const label = o.querySelector('#skinlabel') as HTMLDivElement;
-
-  async function refreshPreview() {
-    stopSkinPreview();
-    const renderer = new THREE.WebGLRenderer({ canvas: previewCanvas, antialias: true });
-    renderer.setSize(previewCanvas.width, previewCanvas.height, false);
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(SKINS[boardSkin].backgroundColor);
-    scene.add(new THREE.AmbientLight(0xffffff, 1.1));
-    const dir = new THREE.DirectionalLight(0xffffff, 0.9); dir.position.set(5, 10, 5); scene.add(dir);
-    const cam = new THREE.PerspectiveCamera(40, previewCanvas.width / previewCanvas.height, 0.1, 100);
-    cam.position.set(9, 7, 9); cam.lookAt(0, 0.5, 0);
-    const group = new THREE.Group();
-    const bv = new BoardView(group, pieceSkin);
-    bv.setSkin(pieceSkin);
-    await bv.loadBoard(SKINS[boardSkin].boardPath);
-    await bv.placeStart();
-    scene.add(group);
-    const controls = new OrbitControls(cam, renderer.domElement);
-    controls.enableDamping = true;
-    controls.autoRotate = true;
-    controls.autoRotateSpeed = 1.2;
-    controls.target.set(0, 0.5, 0);
-    controls.update();
-    function loop() {
-      controls.update();
-      renderer.render(scene, cam);
-      skinPreviewAnimId = requestAnimationFrame(loop);
-    }
-    loop();
-    skinPreviewRenderer = renderer;
-    if (label) label.textContent = `${pieceSkin.toUpperCase()} / ${boardSkin.toUpperCase()}`;
-  }
-
-  o.querySelectorAll('[data-skin="piece"]').forEach((b) => {
-    b.addEventListener('click', () => {
-      SFX.click();
-      pieceSkin = (b as HTMLElement).dataset.val as string;
-      localStorage.setItem('ptk_pieceSkin', pieceSkin);
-      o.querySelectorAll('[data-skin="piece"]').forEach((x) => x.classList.remove('selected'));
-      b.classList.add('selected');
-      refreshPreview();
-    });
-  });
-  o.querySelectorAll('[data-skin="board"]').forEach((b) => {
-    b.addEventListener('click', () => {
-      SFX.click();
-      boardSkin = (b as HTMLElement).dataset.val as string;
-      localStorage.setItem('ptk_boardSkin', boardSkin);
-      o.querySelectorAll('[data-skin="board"]').forEach((x) => x.classList.remove('selected'));
-      b.classList.add('selected');
-      refreshPreview();
-    });
-  });
-  o.querySelector('[data-act="back"]')?.addEventListener('click', () => { SFX.click(); stopSkinPreview(); showMenu(); });
-  refreshPreview();
+/** Builds (or reuses) the 3D army preview shown on the Skins & Boards tab. */
+function ensureSkinPreview(): void {
+  if (!skinPreviewCanvas) return;
+  const key = `${pieceSkin}/${boardSkin}`;
+  if (skinPreviewKey === key) return;
+  disposeSkinPreview();
+  skinPreviewKey = key;
+  void startSkinPreview(skinPreviewCanvas, key, skinPreviewToken);
 }
 
-function showSettings() {
-  screen = 'settings';
-  const o = overlay(`
-    <div class="main-menu">
-      <div class="menu-layout" style="grid-template-columns: minmax(260px, 320px) 1fr; max-width:1000px; margin:0 auto;">
-        <div class="left-col" style="justify-content:center;">
-          <div class="royal-banner">
-            <div class="title">SETTINGS</div>
-            <div class="subtitle">GAME OPTIONS</div>
-          </div>
-          <div style="margin-top:14px;">
-            <button class="med-btn" data-act="back" style="justify-content:center;">BACK</button>
-          </div>
-        </div>
-        <div class="right-col" style="align-items:stretch;justify-content:center;">
-          <div class="quick-panel" style="flex:1;">
-            <div class="panel-title">CONFIGURE</div>
-
-            <div class="mode-section">
-              <div class="mode-name">GRAPHICS</div>
-              <div class="mode-desc">Rendering mode.</div>
-              <div class="mode-options" style="flex-direction:column;gap:8px;">
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                  <input type="radio" name="gfx" value="smooth" ${ctx.graphicsMode() === 'smooth' ? 'checked' : ''} /> Smooth (native, anti-aliased)
-                </label>
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                  <input type="radio" name="gfx" value="pixel" ${ctx.graphicsMode() === 'pixel' ? 'checked' : ''} /> Pixelated (retro)
-                </label>
-              </div>
-              <div id="pixopts" style="margin-top:8px;display:${ctx.graphicsMode() === 'pixel' ? 'block' : 'none'};">
-                <label style="display:block;margin:4px 0;">Pixel width: <input id="pw" type="number" value="${settings.width}" style="width:80px;" /></label>
-                <label style="display:block;margin:4px 0;">Pixel height: <input id="ph" type="number" value="${settings.height}" style="width:80px;" /></label>
-              </div>
-            </div>
-
-            <div class="mode-section" style="margin-top:14px;">
-              <div class="mode-name">CINEMATICS</div>
-              <div class="mode-desc">Capture animations.</div>
-              <select id="cine" style="width:100%;">
-                <option value="on" ${cinematicsMode === 'on' ? 'selected' : ''}>On (full)</option>
-                <option value="short" ${cinematicsMode === 'short' ? 'selected' : ''}>Short</option>
-                <option value="off" ${cinematicsMode === 'off' ? 'selected' : ''}>Off (skip)</option>
-              </select>
-            </div>
-
-            <div class="mode-section" style="margin-top:14px;">
-              <div class="mode-name">AUDIO</div>
-              <div class="mode-desc">Sound effects.</div>
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                <input type="checkbox" id="vol" ${volumeOn ? 'checked' : ''} /> Sound enabled
-              </label>
-            </div>
-
-            <div style="margin-top:16px;display:flex;gap:8px;">
-              <button class="med-btn" data-act="apply" style="flex:1;justify-content:center;">APPLY</button>
-              <button class="med-btn" data-act="reset" style="flex:1;justify-content:center;">RESET DEFAULTS</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>`);
-
-  const gfxRadios = o.querySelectorAll('input[name="gfx"]') as NodeListOf<HTMLInputElement>;
-  const pixopts = o.querySelector('#pixopts') as HTMLDivElement;
-  gfxRadios.forEach((r) => r.addEventListener('change', () => {
-    if (pixopts) pixopts.style.display = (o.querySelector('input[name="gfx"]:checked') as HTMLInputElement)?.value === 'pixel' ? 'block' : 'none';
-  }));
-
-  o.querySelector('[data-act="apply"]')?.addEventListener('click', () => {
-    SFX.click();
-    settings.width = parseInt((o.querySelector('#pw') as HTMLInputElement)?.value || '640') || 640;
-    settings.height = parseInt((o.querySelector('#ph') as HTMLInputElement)?.value || '360') || 360;
-    saveSettings(settings);
-    const gfx = (o.querySelector('input[name="gfx"]:checked') as HTMLInputElement)?.value as 'pixel' | 'smooth';
-    ctx.applyGraphicsMode(gfx);
-    cinematicsMode = (o.querySelector('#cine') as HTMLSelectElement).value as any;
-    localStorage.setItem('ptk_cine', cinematicsMode);
-    volumeOn = (o.querySelector('#vol') as HTMLInputElement).checked;
-    localStorage.setItem('ptk_vol', volumeOn ? '1' : '0');
-    showToast('Settings applied.');
-  });
-  o.querySelector('[data-act="reset"]')?.addEventListener('click', () => {
-    SFX.click();
-    settings = { width: 640, height: 360, posterize: false, outline: false };
-    saveSettings(settings);
-    ctx.applyGraphicsMode('smooth');
-    cinematicsMode = 'on';
-    localStorage.setItem('ptk_cine', cinematicsMode);
-    volumeOn = true;
-    localStorage.setItem('ptk_vol', '1');
-    showSettings();
-    showToast('Reset to defaults.');
-  });
-  o.querySelector('[data-act="back"]')?.addEventListener('click', () => { SFX.click(); showMenu(); });
+async function startSkinPreview(canvas: HTMLCanvasElement, _key: string, token: number): Promise<void> {
+  const piece = pieceSkin;
+  const board = boardSkin;
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setSize(canvas.width, canvas.height, false);
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(SKINS[board].backgroundColor);
+  scene.add(new THREE.AmbientLight(0xffffff, 1.1));
+  const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+  dir.position.set(5, 10, 5);
+  scene.add(dir);
+  const cam = new THREE.PerspectiveCamera(40, canvas.width / canvas.height, 0.1, 100);
+  cam.position.set(9, 7, 9);
+  cam.lookAt(0, 0.5, 0);
+  const group = new THREE.Group();
+  const bv = new BoardView(group, piece);
+  bv.setSkin(piece);
+  try {
+    await bv.loadBoard(SKINS[board].boardPath);
+    if (token !== skinPreviewToken) { renderer.dispose(); return; }
+    await bv.placeStart();
+  } catch {
+    if (token === skinPreviewToken) skinPreviewKey = '';
+    renderer.dispose();
+    return;
+  }
+  if (token !== skinPreviewToken) { renderer.dispose(); return; }
+  scene.add(group);
+  const controls = new OrbitControls(cam, renderer.domElement);
+  controls.enableDamping = true;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 1.2;
+  controls.target.set(0, 0.5, 0);
+  controls.update();
+  const loop = () => {
+    if (token !== skinPreviewToken) return;
+    controls.update();
+    renderer.render(scene, cam);
+    skinPreviewAnimId = requestAnimationFrame(loop);
+  };
+  loop();
+  skinPreviewRenderer = renderer;
+  if (skinPreviewLabel) skinPreviewLabel.textContent = `${piece.toUpperCase()} / ${board.toUpperCase()}`;
 }
 
 function showBattleIntro() {
@@ -689,7 +746,12 @@ function showBattleIntro() {
   setTimeout(() => { el.remove(); introActive = false; }, 2400);
 }
 
-function isMultiplayer(): boolean { return gameMode === 'online' || gameMode === 'local'; }
+function isMultiplayer(): boolean { return gameMode === 'online'; }
+
+/** Ends the online session (no-op for local/AI games). */
+function teardownOnline(): void {
+  if (gameMode === 'online' && adapter) { adapter.disconnect(); adapter = null; }
+}
 
 function showGameMenuButton() {
   document.querySelectorAll('.game-menu-btn, .game-cam-btn').forEach((e) => e.remove());
@@ -780,7 +842,8 @@ async function startGame() {
 
   if (gameMode === 'ai') { if (ai) ai.terminate(); ai = new AI(); }
   if (clock) { clock.stop(); clock = null; }
-  if (gameMode === 'timed' || gameMode === 'online') {
+  if (gameMode === 'online') clockEnabled = true;
+  if (gameMode === 'online' || clockEnabled) {
     // Online uses a fixed preset so both clients create the same clock.
     const preset = gameMode === 'online' ? { min: 10, inc: 0 } : timedPreset;
     clock = new Clock(preset.min, preset.inc);
@@ -818,6 +881,13 @@ async function startGame() {
   showBattleIntro();
   // In-game menu button
   showGameMenuButton();
+
+  // When the player chose Black, the computer opens the game after the intro.
+  if (gameMode === 'ai' && game && game.turn() !== playerColor && !gameOver) {
+    setTimeout(() => {
+      if (gameMode === 'ai' && game && game.turn() !== playerColor && !gameOver && !paused) void doAIMove();
+    }, 2600);
+  }
 }
 
 function ensureHUD() {
@@ -827,14 +897,16 @@ function ensureHUD() {
   h.id = 'gamehud';
   h.style.cssText = 'position:fixed;top:12px;right:12px;width:250px;max-height:88vh;overflow:hidden;background:linear-gradient(180deg,rgba(57,49,44,0.95),rgba(28,27,25,0.95));border:3px solid #C89B42;border-radius:6px;padding:12px;color:#F2E9D5;font-family:"Jersey 10",monospace;font-size:14px;z-index:5;box-shadow:0 8px 24px rgba(0,0,0,0.6),inset 0 0 0 2px rgba(0,0,0,0.3);backdrop-filter:blur(4px);';
   h.innerHTML = `
-    <div style="text-align:center;font-size:1.1rem;letter-spacing:2px;color:#C89B42;margin-bottom:10px;font-family:'Cinzel Decorative',serif;text-shadow:0 2px 0 rgba(0,0,0,0.6);border-bottom:1px solid rgba(200,155,66,0.4);padding-bottom:8px;">PROTECT THE KING</div>
-    <div style="display:flex;gap:6px;margin-bottom:10px;">
+    <div class="hud-title" style="text-align:center;font-size:0.95rem;letter-spacing:1px;white-space:nowrap;color:#C89B42;margin-bottom:10px;font-family:'Cinzel Decorative',serif;text-shadow:0 2px 0 rgba(0,0,0,0.6);border-bottom:1px solid rgba(200,155,66,0.4);padding-bottom:8px;">PROTECT THE KING</div>
+    <div id="clockrow" style="display:${clock ? 'flex' : 'none'};gap:6px;margin-bottom:10px;">
       <div id="clkW" style="flex:1;text-align:center;padding:6px;border-radius:4px;background:rgba(28,27,25,0.7);border:2px solid #C89B42;">W 10:00</div>
       <div id="clkB" style="flex:1;text-align:center;padding:6px;border-radius:4px;background:rgba(28,27,25,0.7);border:2px solid #C89B42;">B 10:00</div>
     </div>
     <div id="turn" style="text-align:center;padding:4px 6px;margin-bottom:8px;border-radius:4px;font-size:0.95rem;letter-spacing:2px;color:#F2E9D5;background:rgba(28,27,25,0.5);border:1px solid rgba(200,155,66,0.3);">WHITE'S TURN</div>
-    <div style="font-size:0.9rem;letter-spacing:2px;color:#C89B42;margin-bottom:4px;font-family:'Cinzel Decorative',serif;">MOVES</div>
-    <div id="movelist" style="max-height:46vh;overflow:auto;line-height:1.9;padding-right:4px;"></div>
+    <div id="moves-section">
+      <div style="font-size:0.9rem;letter-spacing:2px;color:#C89B42;margin-bottom:4px;font-family:'Cinzel Decorative',serif;">MOVES</div>
+      <div id="movelist" style="max-height:46vh;overflow:auto;line-height:1.9;padding-right:4px;"></div>
+    </div>
     <div style="font-size:0.9rem;letter-spacing:2px;color:#C89B42;margin:8px 0 4px;font-family:'Cinzel Decorative',serif;">CAPTURED</div>
     <div id="captured" style="min-height:24px;font-size:16px;letter-spacing:2px;color:#ff8899;"></div>`;
   document.body.appendChild(h);
@@ -911,14 +983,14 @@ function applyMoveToBoard(from: string, to: string, mv: any, _isCapture: boolean
       for (const [sq, pm] of boardView!.pieces) { if (pm.type === 'king' && pm.color === side) { boardView!.showCheck(sq); break; } }
     }
     if (gameMode === 'online' && adapter && !wasRemote) adapter.sendMove({ from, to, promotion: mv.promotion, fen: game!.fen(), whiteMs: clock?.whiteMs, blackMs: clock?.blackMs });
-    if (clock && (gameMode === 'timed' || gameMode === 'online') && !remoteMove) adapter?.sendClock(clock.whiteMs, clock.blackMs);
+    if (clock && gameMode === 'online' && !wasRemote) adapter?.sendClock(clock.whiteMs, clock.blackMs);
     updateHUD();
     SFX.move();
     if (mv.san.includes('+') || mv.san.includes('#')) { SFX.check(); }
   };
 
   const cinematicsOn = cinematicsMode !== 'off' && isCaptureMove;
-  const shortMode = cinematicsMode === 'short' || gameMode === 'timed';
+  const shortMode = cinematicsMode === 'short' || (clockEnabled && gameMode !== 'online');
   if (cinematicsOn && piece) {
     const victimMesh = victim?.mesh || null;
     // freeze the clock and input while the capture cinematic plays
@@ -956,12 +1028,12 @@ function applyMoveToBoard(from: string, to: string, mv: any, _isCapture: boolean
 function checkEndAndAI() {
   if (!game) return;
   if (game.isGameOver()) { handleGameOver(); return; }
-  if (clock && (gameMode === 'timed' || gameMode === 'online')) {
+  if (clock && (clockEnabled || gameMode === 'online')) {
     if (!clock.started && moveHistory.length >= 1) clock.start(game.turn() === 'w' ? 'w' : 'b');
     else clock.switchTo(game.turn() === 'w' ? 'w' : 'b');
   }
   // AI move
-  if (gameMode === 'ai' && game.turn() !== playerColor[0] as 'w' | 'b' && !gameOver && !paused) {
+  if (gameMode === 'ai' && game.turn() !== playerColor && !gameOver && !paused) {
     const turnEl = document.getElementById('turn');
     if (turnEl) turnEl.textContent = 'AI THINKING...';
     setTimeout(() => { if (!paused) doAIMove(); }, 300);
@@ -1003,6 +1075,7 @@ async function doAIMove() {
 
 function handleGameOver() {
   gameOver = true;
+  teardownOnline();
   if (clock) clock.stop();
   let msg = 'Game over';
   if (game!.isCheckmate()) msg = `Checkmate! ${game!.turn() === 'w' ? 'Black' : 'White'} wins`;
@@ -1010,11 +1083,12 @@ function handleGameOver() {
   else if (game!.isDraw()) msg = 'Draw';
   SFX.mate();
   // gameover screen
+  const canRematch = gameMode !== 'online';
   const o = overlay(`
     <div class="menu-card">
       <div class="title">${msg.toUpperCase()}</div>
       <div style="margin-top:16px;display:flex;gap:8px;justify-content:center;">
-        <button data-act="rematch">REMATCH</button>
+        ${canRematch ? '<button data-act="rematch">REMATCH</button>' : ''}
         <button data-act="menu">MENU</button>
       </div>
     </div>`);
@@ -1025,6 +1099,7 @@ function handleGameOver() {
 function endGame(msg: string) {
   if (gameOver) return;
   gameOver = true;
+  teardownOnline();
   if (clock) clock.stop();
   if (hudInterval) { clearInterval(hudInterval); hudInterval = null; }
   document.querySelectorAll('.game-menu-btn, .game-cam-btn').forEach((e) => e.remove());

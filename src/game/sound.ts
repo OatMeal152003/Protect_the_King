@@ -1,7 +1,9 @@
 let ac: AudioContext | null = null;
+let muted = false;
 function ctx(): AudioContext { if (!ac) ac = new AudioContext(); return ac; }
 
 export function playBeep(freq: number, dur = 0.1, type: OscillatorType = 'square', vol = 0.05): void {
+  if (muted) return;
   try {
     const c = ctx();
     const o = c.createOscillator();
@@ -16,6 +18,7 @@ export function playBeep(freq: number, dur = 0.1, type: OscillatorType = 'square
 }
 
 export const SFX = {
+  setMuted: (m: boolean): void => { muted = m; },
   move: () => playBeep(440, 0.06, 'square', 0.04),
   capture: () => { playBeep(220, 0.08, 'sawtooth', 0.06); setTimeout(() => playBeep(150, 0.1, 'sawtooth', 0.05), 60); },
   check: () => playBeep(660, 0.12, 'triangle', 0.06),

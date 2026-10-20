@@ -96,7 +96,6 @@ export class SupabaseAdapter implements NetAdapter {
       .channel(`room:${code}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'moves', filter: `room_code=eq.${code}` }, (payload: any) => {
         const row = payload.new;
-        console.log('[supabase] move insert', row?.id, row?.from_sq, row?.to_sq);
         if (!row || typeof row.id !== 'number') return;
         // Strictly ordered: never apply an older row twice or out of order.
         if (row.id <= this.lastRowId) return;
@@ -109,7 +108,7 @@ export class SupabaseAdapter implements NetAdapter {
           whiteMs: row.white_ms,
           blackMs: row.black_ms,
         };
-        if (this.isOwnEcho(move)) { console.log('[supabase] skip own echo'); return; }
+        if (this.isOwnEcho(move)) return;
         this.emit(move);
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `code=eq.${code}` }, (payload: any) => {
@@ -117,7 +116,6 @@ export class SupabaseAdapter implements NetAdapter {
         if (row?.black_present) this.oppCb?.(true);
       })
       .subscribe((status: string) => {
-        console.log('[supabase] moves channel:', status, code);
         // Realtime does not replay events missed during a disconnect;
         // pull anything we have not seen yet so the game can never deadlock.
         if (status === 'SUBSCRIBED') void this.resync();
